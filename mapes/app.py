@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from flask import Flask, jsonify, request, render_template
 
+from . import db
+from .config import load_config, save_config
 from .db import get_connection, init_db
 from .paths import resource_root
 
@@ -175,6 +179,45 @@ def create_app():
         conn.commit()
         conn.close()
         return "", 204
+
+    # ---------- data location (open/switch database) ----------
+
+    @app.get("/api/system/data-location")
+    def get_data_location():
+        return jsonify({
+            "path": str(db.DB_PATH),
+            "dir": str(db.DATA_DIR),
+            "exists": db.DB_PATH.exists(),
+        })
+
+    @app.post("/api/system/data-location")
+    def set_data_location():
+        data = request.get_json(force=True) or {}
+        raw = (data.get("path") or "").strip()
+        if not raw:
+            return jsonify({"error": "Путь не указан"}), 400
+
+        target = Path(raw).expanduser()
+        is_db_file = target.suffix.lower() == ".db"
+        try:
+            (target.parent if is_db_file else target).mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return jsonify({"error": f"Не удалось открыть путь: {exc}"}), 400
+
+        existed = target.exists() if is_db_file else (target / "mapes.db").exists()
+
+        db.configure(target)
+        init_db()
+
+        cfg = load_config()
+        cfg["data_path"] = str(target)
+        save_config(cfg)
+
+        return jsonify({
+            "path": str(db.DB_PATH),
+            "dir": str(db.DATA_DIR),
+            "existed": existed,
+        })
 
     # ---------- search ----------
 

@@ -544,4 +544,53 @@ function escapeHtml(str) {
   }[c]));
 }
 
+// ---------- database location (open / switch existing db) ----------
+
+async function loadDataLocation() {
+  const info = await api("/api/system/data-location");
+  $("#db-current-path").textContent = `Сейчас: ${info.path}`;
+  $("#db-path-input").value = info.path;
+}
+
+function revealNativePickers() {
+  $("#db-pick-folder-btn").hidden = false;
+  $("#db-pick-file-btn").hidden = false;
+}
+
+if (window.pywebview && window.pywebview.api) {
+  revealNativePickers();
+} else {
+  window.addEventListener("pywebviewready", revealNativePickers);
+}
+
+$("#db-pick-folder-btn").onclick = async () => {
+  if (!window.pywebview || !window.pywebview.api) return;
+  const path = await window.pywebview.api.pick_folder();
+  if (path) $("#db-path-input").value = path;
+};
+
+$("#db-pick-file-btn").onclick = async () => {
+  if (!window.pywebview || !window.pywebview.api) return;
+  const path = await window.pywebview.api.pick_file();
+  if (path) $("#db-path-input").value = path;
+};
+
+$("#db-apply-btn").onclick = async () => {
+  const path = $("#db-path-input").value.trim();
+  if (!path) return;
+  try {
+    const res = await api("/api/system/data-location", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+    alert(res.existed ? `Открыта существующая база:\n${res.path}` : `Создана новая база:\n${res.path}`);
+    state.currentBoardId = null;
+    await loadBoards();
+    await loadDataLocation();
+  } catch (e) {
+    alert(`Ошибка: ${e.message}`);
+  }
+};
+
 loadBoards();
+loadDataLocation();

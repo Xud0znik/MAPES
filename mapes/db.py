@@ -7,12 +7,18 @@ DATA_DIR = app_dir() / "data"
 DB_PATH = DATA_DIR / "mapes.db"
 
 
-def configure(data_dir):
-    """Point the database at a different folder (chosen by the user at
-    startup). Must be called before init_db()/get_connection()."""
+def configure(path):
+    """Point the database at a different location: either a folder (the db
+    lives at <folder>/mapes.db, created if missing) or a direct path to an
+    existing/new .db file. Must be called before init_db()/get_connection()."""
     global DATA_DIR, DB_PATH
-    DATA_DIR = Path(data_dir)
-    DB_PATH = DATA_DIR / "mapes.db"
+    p = Path(path).expanduser()
+    if p.suffix.lower() == ".db":
+        DB_PATH = p
+        DATA_DIR = p.parent
+    else:
+        DATA_DIR = p
+        DB_PATH = DATA_DIR / "mapes.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS boards (

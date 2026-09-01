@@ -4,12 +4,15 @@
 Запуск из исходников:  python mapes.py
 Или готовый MAPES.exe - двойной клик.
 
-При первом запуске приложение спрашивает, в какой папке хранить данные
-(mapes.db), и запоминает выбор в mapes_config.json рядом с приложением.
+При первом запуске приложение спрашивает, в какой папке хранить данные;
+внутри неё создаётся подпапка "data" с файлом mapes.db (так же, как раньше,
+когда путь не спрашивался и всегда использовалась app_dir()/data). Выбор
+запоминается в mapes_config.json рядом с приложением. Открыть другую (уже
+существующую) базу можно позже прямо в интерфейсе, в разделе "База данных".
+
 Открывается отдельное окно (pywebview); если pywebview не установлен -
 приложение просто откроется в браузере на localhost.
 """
-import json
 import os
 import socket
 import threading
@@ -19,32 +22,19 @@ from pathlib import Path
 
 from mapes import db
 from mapes.app import create_app
+from mapes.config import load_config, save_config
 from mapes.paths import app_dir
 
 HOST = "127.0.0.1"
 PORT = 5057
-CONFIG_PATH = app_dir() / "mapes_config.json"
-
-
-def load_config():
-    if CONFIG_PATH.exists():
-        try:
-            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {}
-    return {}
-
-
-def save_config(cfg):
-    try:
-        CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    except OSError:
-        pass
 
 
 def pick_data_dir_dialog():
-    """Ask the user, via a native folder-picker, where to store data.
-    Falls back to app_dir()/data if no display/toolkit is available or the
+    """Ask the user, via a native folder-picker, where to store data. A
+    "data" subfolder is created inside whatever they pick, so the chosen
+    location doesn't get littered with loose mapes.db/mapes_config.json
+    files (matches the old, no-prompt default of app_dir()/data). Falls
+    back to app_dir()/data if no display/toolkit is available or the
     dialog is cancelled."""
     default = app_dir() / "data"
     try:
@@ -56,7 +46,8 @@ def pick_data_dir_dialog():
         root.attributes("-topmost", True)
         messagebox.showinfo(
             "MAPES",
-            "Выбери папку, где MAPES будет хранить свои данные (файл mapes.db).\n\n"
+            "Выбери папку, где MAPES будет хранить свои данные.\n"
+            "Внутри неё появится подпапка \"data\" с файлом mapes.db.\n\n"
             "Отмена - будет использована папка \"data\" рядом с приложением.",
         )
         chosen = filedialog.askdirectory(
@@ -64,32 +55,24 @@ def pick_data_dir_dialog():
         )
         root.destroy()
         if chosen:
-            return Path(chosen)
+            return Path(chosen) / "data"
     except Exception:
         pass
     return default
 
 
 def resolve_data_dir():
-    env_dir = os.environ.get("MAPES_DATA_DIR")
-    if env_dir:
-        p = Path(env_dir)
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+    env_path = os.environ.get("MAPES_DATA_DIR")
+    if env_path:
+        return Path(env_path).expanduser()
 
     cfg = load_config()
-    saved = cfg.get("data_dir")
+    saved = cfg.get("data_path") or cfg.get("data_dir")
     if saved:
-        p = Path(saved)
-        try:
-            p.mkdir(parents=True, exist_ok=True)
-            return p
-        except OSError:
-            pass  # saved path is no longer valid (e.g. removable drive) - ask again
+        return Path(saved)
 
     chosen = pick_data_dir_dialog()
-    chosen.mkdir(parents=True, exist_ok=True)
-    save_config({**cfg, "data_dir": str(chosen)})
+    save_config({**cfg, "data_path": str(chosen)})
     return chosen
 
 
@@ -109,10 +92,42 @@ def wait_for_server(host, port, timeout=10.0):
     return False
 
 
+class Api:
+    """Bridged to the frontend as window.pywebview.api.* so the "Обзор..."
+    buttons in the "База данных" section can open native pick dialogs."""
+
+    def pick_folder(self):
+        return self._dialog("folder")
+
+    def pick_file(self):
+        return self._dialog("file")
+
+    @staticmethod
+    def _dialog(kind):
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            if kind == "folder":
+                chosen = filedialog.askdirectory(title="Папка с базой данных MAPES")
+            else:
+                chosen = filedialog.askopenfilename(
+                    title="Файл базы данных MAPES (.db)",
+                    filetypes=[("SQLite database", "*.db"), ("Все файлы", "*.*")],
+                )
+            root.destroy()
+            return chosen or None
+        except Exception:
+            return None
+
+
 def main():
     data_dir = resolve_data_dir()
     db.configure(data_dir)
-    print(f"MAPES: данные хранятся в {data_dir}")
+    print(f"MAPES: данные хранятся в {db.DB_PATH}")
 
     threading.Thread(target=run_server, daemon=True).start()
     url = f"http://{HOST}:{PORT}/"
@@ -137,7 +152,9 @@ def open_app_window(url):
     except ImportError:
         return False
     try:
-        webview.create_window("MAPES", url, width=1280, height=800, min_size=(960, 640))
+        webview.create_window(
+            "MAPES", url, js_api=Api(), width=1280, height=800, min_size=(960, 640)
+        )
         webview.start()
         return True
     except Exception as exc:

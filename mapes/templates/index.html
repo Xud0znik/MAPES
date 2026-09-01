@@ -34,6 +34,13 @@
     <button id="export-btn" class="btn-secondary">⭳ Экспорт в JSON</button>
     <button id="import-btn" class="btn-secondary">⭱ Импорт из JSON</button>
     <input id="import-file" type="file" accept="application/json" hidden>
+
+    <div class="section-title">База данных</div>
+    <div id="db-current-path" class="db-current-path">-</div>
+    <input id="db-path-input" type="text" placeholder="Путь к папке или .db файлу">
+    <button id="db-pick-folder-btn" class="btn-secondary" hidden>Обзор папки...</button>
+    <button id="db-pick-file-btn" class="btn-secondary" hidden>Обзор .db файла...</button>
+    <button id="db-apply-btn" class="btn-primary">Открыть / переключить</button>
   </aside>
 
   <main id="board-area">

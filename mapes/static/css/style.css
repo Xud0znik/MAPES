@@ -1,0 +1,182 @@
+:root {
+  --bg: #0f1218;
+  --panel: #161b24;
+  --panel-2: #1d2330;
+  --border: #2a3142;
+  --text: #e6e9ef;
+  --muted: #8b94a7;
+  --accent: #4f8cff;
+  --danger: #ff5f5f;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: 14px;
+}
+
+#app { display: flex; height: 100vh; }
+
+#sidebar {
+  width: 280px;
+  min-width: 280px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+
+.section-title {
+  margin: 16px 0 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+.board-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 4px;
+  color: var(--text);
+}
+.board-item:hover { background: var(--panel-2); }
+.board-item.active { background: var(--accent); color: #fff; }
+
+input, select, textarea {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+textarea { resize: vertical; }
+
+label {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+.btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+.btn-secondary, .btn-primary, .btn-danger { width: 100%; margin-top: 6px; }
+
+#connect-btn.active { background: var(--accent); color: #fff; }
+
+.help { color: var(--muted); font-size: 12px; padding-left: 16px; line-height: 1.6; }
+
+#search-results { margin-top: 6px; }
+.search-hit {
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.search-hit:hover { background: var(--panel-2); color: var(--text); }
+
+#board-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+#board-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+#board-toolbar button { width: auto; margin-top: 0; }
+#board-title { font-weight: 600; margin-right: auto; }
+
+#canvas-wrapper {
+  position: relative;
+  flex: 1;
+  overflow: auto;
+  background-image: radial-gradient(circle, #232a38 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+#canvas {
+  position: relative;
+  width: 3000px;
+  height: 2000px;
+}
+
+#edges-layer {
+  position: absolute;
+  top: 0; left: 0;
+  width: 3000px;
+  height: 2000px;
+  pointer-events: none;
+}
+
+.node {
+  position: absolute;
+  width: 180px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px;
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0,0,0,.3);
+  user-select: none;
+}
+.node.selected { outline: 2px solid var(--accent); }
+.node .node-title { font-weight: 600; margin-bottom: 4px; word-break: break-word; }
+.node .node-type { font-size: 10px; text-transform: uppercase; color: var(--muted); }
+.node .node-tags { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal.hidden { display: none; }
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  width: 420px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+.modal-actions button { width: auto; margin-top: 0; }

@@ -180,18 +180,19 @@ def create_app():
         conn.close()
         return "", 204
 
-    # ---------- data location (open/switch database) ----------
+    # ---------- file: current location, open, save as, save ----------
 
-    @app.get("/api/system/data-location")
-    def get_data_location():
+    @app.get("/api/system/file-status")
+    def file_status():
+        cfg = load_config()
         return jsonify({
             "path": str(db.DB_PATH),
-            "dir": str(db.DATA_DIR),
-            "exists": db.DB_PATH.exists(),
+            "linked_path": cfg.get("linked_path"),
         })
 
-    @app.post("/api/system/data-location")
-    def set_data_location():
+    @app.post("/api/system/open")
+    def open_database():
+        """Switch the live working database to an existing (or new) file/folder."""
         data = request.get_json(force=True) or {}
         raw = (data.get("path") or "").strip()
         if not raw:
@@ -213,11 +214,44 @@ def create_app():
         cfg["data_path"] = str(target)
         save_config(cfg)
 
-        return jsonify({
-            "path": str(db.DB_PATH),
-            "dir": str(db.DATA_DIR),
-            "existed": existed,
-        })
+        return jsonify({"path": str(db.DB_PATH), "existed": existed})
+
+    @app.post("/api/system/save-as")
+    def save_as():
+        """Copy the current live database to a new file the user picks, and
+        remember it so plain "Сохранить" writes there again."""
+        data = request.get_json(force=True) or {}
+        raw = (data.get("path") or "").strip()
+        if not raw:
+            return jsonify({"error": "Путь не указан"}), 400
+
+        target = Path(raw).expanduser()
+        if target.suffix.lower() != ".db":
+            target = target.with_suffix(".db") if target.suffix else target / "mapes.db"
+
+        try:
+            db.backup_to(target)
+        except OSError as exc:
+            return jsonify({"error": f"Не удалось сохранить: {exc}"}), 400
+
+        cfg = load_config()
+        cfg["linked_path"] = str(target)
+        save_config(cfg)
+
+        return jsonify({"path": str(target)})
+
+    @app.post("/api/system/save")
+    def save_now():
+        """Re-save to the location previously chosen via "Сохранить как"."""
+        cfg = load_config()
+        linked = cfg.get("linked_path")
+        if not linked:
+            return jsonify({"error": 'Сначала выбери файл через "Сохранить как"'}), 400
+        try:
+            db.backup_to(linked)
+        except OSError as exc:
+            return jsonify({"error": f"Не удалось сохранить: {exc}"}), 400
+        return jsonify({"path": linked})
 
     # ---------- search ----------
 

@@ -9,7 +9,7 @@
 <body>
 <div id="app">
   <aside id="sidebar">
-    <div class="brand">MAPES</div>
+    <div class="brand"><span class="brand-mark"></span>MAPES</div>
 
     <div class="section-title">Карты</div>
     <div id="board-list"></div>
@@ -19,41 +19,49 @@
     <input id="search-input" type="text" placeholder="Поиск по узлам...">
     <div id="search-results"></div>
 
-    <div class="section-title">Как пользоваться</div>
-    <ul class="help">
-      <li>Двойной клик по полю - новый узел</li>
-      <li>Перетаскивай узлы мышью</li>
-      <li>«Связать» → клик по 2 узлам подряд</li>
-      <li>Клик по узлу - редактировать</li>
-      <li>Ctrl/Alt + колесо мыши - зум</li>
-      <li>Правый клик по узлу - меню</li>
-      <li>Esc - закрыть окно узла</li>
-    </ul>
+    <div class="section-title">Файл</div>
+    <div id="file-path" class="file-path">-</div>
+    <div class="file-actions">
+      <button id="file-open-btn" class="btn-secondary">Открыть</button>
+      <button id="file-save-as-btn" class="btn-secondary">Сохранить как</button>
+      <button id="file-save-btn" class="btn-primary" disabled>Сохранить</button>
+    </div>
+    <div id="file-status" class="file-status"></div>
 
-    <div class="section-title">Карта: экспорт / импорт</div>
-    <button id="export-btn" class="btn-secondary">⭳ Экспорт в JSON</button>
-    <button id="import-btn" class="btn-secondary">⭱ Импорт из JSON</button>
-    <input id="import-file" type="file" accept="application/json" hidden>
+    <details class="collapsible">
+      <summary>Экспорт / импорт JSON</summary>
+      <button id="export-btn" class="btn-secondary">⭳ Экспорт карты в JSON</button>
+      <button id="import-btn" class="btn-secondary">⭱ Импорт карты из JSON</button>
+      <input id="import-file" type="file" accept="application/json" hidden>
+    </details>
 
-    <div class="section-title">База данных</div>
-    <div id="db-current-path" class="db-current-path">-</div>
-    <input id="db-path-input" type="text" placeholder="Путь к папке или .db файлу">
-    <button id="db-pick-folder-btn" class="btn-secondary" hidden>Обзор папки...</button>
-    <button id="db-pick-file-btn" class="btn-secondary" hidden>Обзор .db файла...</button>
-    <button id="db-apply-btn" class="btn-primary">Открыть / переключить</button>
+    <details class="collapsible">
+      <summary>Как пользоваться</summary>
+      <ul class="help">
+        <li>Двойной клик по полю - новый узел</li>
+        <li>Перетаскивай узлы мышью</li>
+        <li>«Связать» → клик по 2 узлам подряд</li>
+        <li>Клик по узлу - редактировать</li>
+        <li>Ctrl/Alt + колесо мыши - зум</li>
+        <li>Правый клик по узлу - меню</li>
+        <li>Esc - закрыть окно узла</li>
+      </ul>
+    </details>
   </aside>
 
   <main id="board-area">
     <div id="board-toolbar">
       <span id="board-title">-</span>
+      <div class="toolbar-spacer"></div>
       <div class="zoom-controls">
-        <button id="zoom-out-btn" class="btn-secondary">−</button>
+        <button id="zoom-out-btn" class="icon-btn" title="Уменьшить">−</button>
         <span id="zoom-label">100%</span>
-        <button id="zoom-in-btn" class="btn-secondary">+</button>
-        <button id="zoom-reset-btn" class="btn-secondary">Сброс</button>
+        <button id="zoom-in-btn" class="icon-btn" title="Увеличить">+</button>
+        <button id="zoom-reset-btn" class="btn-ghost" title="Сбросить масштаб">Сброс</button>
       </div>
-      <button id="connect-btn" class="btn-secondary">Связать узлы</button>
-      <button id="delete-board-btn" class="btn-danger">Удалить карту</button>
+      <span class="toolbar-sep"></span>
+      <button id="connect-btn" class="btn-ghost">⌁ Связать узлы</button>
+      <button id="delete-board-btn" class="btn-ghost danger">Удалить карту</button>
     </div>
     <div id="canvas-wrapper">
       <div id="canvas-sizer">
@@ -78,12 +86,12 @@
     <input id="node-title" type="text">
     <label>Тип</label>
     <select id="node-type">
-      <option value="note">Заметка</option>
-      <option value="host">Хост / сервер</option>
-      <option value="account">Учётка / пароль</option>
-      <option value="link">Ссылка</option>
-      <option value="file">Файл / путь</option>
-      <option value="other">Другое</option>
+      <option value="note">📝 Заметка</option>
+      <option value="host">🖥 Хост / сервер</option>
+      <option value="account">🔑 Учётка / пароль</option>
+      <option value="link">🔗 Ссылка</option>
+      <option value="file">📄 Файл / путь</option>
+      <option value="other">▫ Другое</option>
     </select>
     <label>Цвет</label>
     <input id="node-color" type="color" value="#4f8cff">

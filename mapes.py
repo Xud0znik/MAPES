@@ -4,11 +4,10 @@
 Запуск из исходников:  python mapes.py
 Или готовый MAPES.exe - двойной клик.
 
-При первом запуске приложение спрашивает, в какой папке хранить данные;
-внутри неё создаётся подпапка "data" с файлом mapes.db (так же, как раньше,
-когда путь не спрашивался и всегда использовалась app_dir()/data). Выбор
-запоминается в mapes_config.json рядом с приложением. Открыть другую (уже
-существующую) базу можно позже прямо в интерфейсе, в разделе "База данных".
+Ничего не спрашивает при запуске - как и раньше, тихо использует папку
+"data" рядом с приложением (или MAPES_DATA_DIR, если задана). Открыть
+другую существующую базу, или сохранить копию карты в выбранное место,
+можно в любой момент прямо в интерфейсе (раздел "Файл" в сайдбаре).
 
 Открывается отдельное окно (pywebview); если pywebview не установлен -
 приложение просто откроется в браузере на localhost.
@@ -22,43 +21,11 @@ from pathlib import Path
 
 from mapes import db
 from mapes.app import create_app
-from mapes.config import load_config, save_config
+from mapes.config import load_config
 from mapes.paths import app_dir
 
 HOST = "127.0.0.1"
 PORT = 5057
-
-
-def pick_data_dir_dialog():
-    """Ask the user, via a native folder-picker, where to store data. A
-    "data" subfolder is created inside whatever they pick, so the chosen
-    location doesn't get littered with loose mapes.db/mapes_config.json
-    files (matches the old, no-prompt default of app_dir()/data). Falls
-    back to app_dir()/data if no display/toolkit is available or the
-    dialog is cancelled."""
-    default = app_dir() / "data"
-    try:
-        import tkinter as tk
-        from tkinter import filedialog, messagebox
-
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        messagebox.showinfo(
-            "MAPES",
-            "Выбери папку, где MAPES будет хранить свои данные.\n"
-            "Внутри неё появится подпапка \"data\" с файлом mapes.db.\n\n"
-            "Отмена - будет использована папка \"data\" рядом с приложением.",
-        )
-        chosen = filedialog.askdirectory(
-            title="Папка для данных MAPES", initialdir=str(app_dir())
-        )
-        root.destroy()
-        if chosen:
-            return Path(chosen) / "data"
-    except Exception:
-        pass
-    return default
 
 
 def resolve_data_dir():
@@ -67,13 +34,11 @@ def resolve_data_dir():
         return Path(env_path).expanduser()
 
     cfg = load_config()
-    saved = cfg.get("data_path") or cfg.get("data_dir")
+    saved = cfg.get("data_path")
     if saved:
         return Path(saved)
 
-    chosen = pick_data_dir_dialog()
-    save_config({**cfg, "data_path": str(chosen)})
-    return chosen
+    return app_dir() / "data"
 
 
 def run_server():
@@ -93,17 +58,11 @@ def wait_for_server(host, port, timeout=10.0):
 
 
 class Api:
-    """Bridged to the frontend as window.pywebview.api.* so the "Обзор..."
-    buttons in the "База данных" section can open native pick dialogs."""
+    """Bridged to the frontend as window.pywebview.api.* so the "Файл"
+    section's buttons can open native pick dialogs."""
 
-    def pick_folder(self):
-        return self._dialog("folder")
-
-    def pick_file(self):
-        return self._dialog("file")
-
-    @staticmethod
-    def _dialog(kind):
+    def pick_open_file(self):
+        """For "Открыть..." - pick an existing .db file to switch to."""
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -111,13 +70,30 @@ class Api:
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
-            if kind == "folder":
-                chosen = filedialog.askdirectory(title="Папка с базой данных MAPES")
-            else:
-                chosen = filedialog.askopenfilename(
-                    title="Файл базы данных MAPES (.db)",
-                    filetypes=[("SQLite database", "*.db"), ("Все файлы", "*.*")],
-                )
+            chosen = filedialog.askopenfilename(
+                title="Открыть базу данных MAPES (.db)",
+                filetypes=[("SQLite database", "*.db"), ("Все файлы", "*.*")],
+            )
+            root.destroy()
+            return chosen or None
+        except Exception:
+            return None
+
+    def pick_save_as_file(self):
+        """For "Сохранить как..." - pick a destination .db file."""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            chosen = filedialog.asksaveasfilename(
+                title="Сохранить карту как...",
+                defaultextension=".db",
+                filetypes=[("SQLite database", "*.db"), ("Все файлы", "*.*")],
+                initialfile="mapes.db",
+            )
             root.destroy()
             return chosen or None
         except Exception:

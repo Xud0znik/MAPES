@@ -15,6 +15,15 @@ const ZOOM_STEP = 0.1;
 const BASE_W = 3000;
 const BASE_H = 2000;
 
+const NODE_ICONS = {
+  note: "📝",
+  host: "🖥",
+  account: "🔑",
+  link: "🔗",
+  file: "📄",
+  other: "▫",
+};
+
 const $ = (sel) => document.querySelector(sel);
 
 async function api(path, opts) {
@@ -156,7 +165,7 @@ function buildNodeEl(node) {
   el.style.top = `${node.y}px`;
   el.style.borderLeftColor = node.color || "#4f8cff";
   el.innerHTML = `
-    <div class="node-type">${escapeHtml(node.type)}</div>
+    <div class="node-type">${NODE_ICONS[node.type] || NODE_ICONS.other} ${escapeHtml(node.type)}</div>
     <div class="node-title">${escapeHtml(node.title)}</div>
     ${node.tags ? `<div class="node-tags">#${escapeHtml(node.tags).replace(/,\s*/g, " #")}</div>` : ""}
   `;
@@ -544,53 +553,79 @@ function escapeHtml(str) {
   }[c]));
 }
 
-// ---------- database location (open / switch existing db) ----------
+// ---------- file: current path, open, save as, save ----------
 
-async function loadDataLocation() {
-  const info = await api("/api/system/data-location");
-  $("#db-current-path").textContent = `Сейчас: ${info.path}`;
-  $("#db-path-input").value = info.path;
+function hasNativeApi() {
+  return !!(window.pywebview && window.pywebview.api);
 }
 
-function revealNativePickers() {
-  $("#db-pick-folder-btn").hidden = false;
-  $("#db-pick-file-btn").hidden = false;
+async function refreshFileStatus() {
+  const info = await api("/api/system/file-status");
+  $("#file-path").textContent = info.path;
+  if (info.linked_path) {
+    $("#file-save-btn").disabled = false;
+    setFileStatus(`Связано с: ${info.linked_path}`);
+  } else {
+    $("#file-save-btn").disabled = true;
+  }
 }
 
-if (window.pywebview && window.pywebview.api) {
-  revealNativePickers();
-} else {
-  window.addEventListener("pywebviewready", revealNativePickers);
+function setFileStatus(text) {
+  $("#file-status").textContent = text;
 }
 
-$("#db-pick-folder-btn").onclick = async () => {
-  if (!window.pywebview || !window.pywebview.api) return;
-  const path = await window.pywebview.api.pick_folder();
-  if (path) $("#db-path-input").value = path;
-};
-
-$("#db-pick-file-btn").onclick = async () => {
-  if (!window.pywebview || !window.pywebview.api) return;
-  const path = await window.pywebview.api.pick_file();
-  if (path) $("#db-path-input").value = path;
-};
-
-$("#db-apply-btn").onclick = async () => {
-  const path = $("#db-path-input").value.trim();
+$("#file-open-btn").onclick = async () => {
+  let path;
+  if (hasNativeApi()) {
+    path = await window.pywebview.api.pick_open_file();
+  } else {
+    path = prompt("Путь к папке или .db файлу для открытия:");
+  }
   if (!path) return;
   try {
-    const res = await api("/api/system/data-location", {
+    const res = await api("/api/system/open", {
       method: "POST",
       body: JSON.stringify({ path }),
     });
-    alert(res.existed ? `Открыта существующая база:\n${res.path}` : `Создана новая база:\n${res.path}`);
+    setFileStatus(res.existed ? "Открыта существующая карта" : "Создана новая карта");
     state.currentBoardId = null;
     await loadBoards();
-    await loadDataLocation();
+    await refreshFileStatus();
+  } catch (e) {
+    alert(`Ошибка: ${e.message}`);
+  }
+};
+
+$("#file-save-as-btn").onclick = async () => {
+  let path;
+  if (hasNativeApi()) {
+    path = await window.pywebview.api.pick_save_as_file();
+  } else {
+    path = prompt("Сохранить карту как (путь к .db файлу):");
+  }
+  if (!path) return;
+  try {
+    const res = await api("/api/system/save-as", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    });
+    setFileStatus(`Сохранено: ${res.path}`);
+    $("#file-save-btn").disabled = false;
+  } catch (e) {
+    alert(`Ошибка: ${e.message}`);
+  }
+};
+
+$("#file-save-btn").onclick = async () => {
+  try {
+    const res = await api("/api/system/save", { method: "POST" });
+    const now = new Date().toLocaleTimeString("ru-RU");
+    setFileStatus(`Сохранено в ${now}`);
   } catch (e) {
     alert(`Ошибка: ${e.message}`);
   }
 };
 
 loadBoards();
+refreshFileStatus();
 loadDataLocation();

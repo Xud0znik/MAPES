@@ -64,6 +64,22 @@ def get_connection():
     return conn
 
 
+def backup_to(dest_path):
+    """Safely copy the current live database to dest_path using SQLite's
+    online backup API (consistent even while the app is being used), for
+    the "Сохранить как" / "Сохранить" actions."""
+    dest = Path(dest_path).expanduser()
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    src_conn = sqlite3.connect(DB_PATH)
+    dest_conn = sqlite3.connect(dest)
+    try:
+        with dest_conn:
+            src_conn.backup(dest_conn)
+    finally:
+        src_conn.close()
+        dest_conn.close()
+
+
 def init_db():
     conn = get_connection()
     try:

@@ -58,7 +58,7 @@ def init_db():
         if row["c"] == 0:
             conn.execute(
                 "INSERT INTO boards (name, description) VALUES (?, ?)",
-                ("Моя карта", "Первая карта — добавляй сюда что угодно"),
+                ("Моя карта", "Первая карта - добавляй сюда что угодно"),
             )
             conn.commit()
     finally:

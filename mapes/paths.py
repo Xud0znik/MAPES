@@ -14,7 +14,7 @@ def resource_root() -> Path:
 
 
 def app_dir() -> Path:
-    """Directory next to the app (source checkout or the .exe) — used for
+    """Directory next to the app (source checkout or the .exe) - used for
     writable data such as the SQLite database."""
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent

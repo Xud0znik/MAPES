@@ -21,24 +21,47 @@
 
     <div class="section-title">Как пользоваться</div>
     <ul class="help">
-      <li>Двойной клик по полю — новый узел</li>
+      <li>Двойной клик по полю - новый узел</li>
       <li>Перетаскивай узлы мышью</li>
       <li>«Связать» → клик по 2 узлам подряд</li>
-      <li>Клик по узлу — редактировать</li>
+      <li>Клик по узлу - редактировать</li>
+      <li>Ctrl/Alt + колесо мыши - зум</li>
+      <li>Правый клик по узлу - меню</li>
+      <li>Esc - закрыть окно узла</li>
     </ul>
+
+    <div class="section-title">Карта: экспорт / импорт</div>
+    <button id="export-btn" class="btn-secondary">⭳ Экспорт в JSON</button>
+    <button id="import-btn" class="btn-secondary">⭱ Импорт из JSON</button>
+    <input id="import-file" type="file" accept="application/json" hidden>
   </aside>
 
   <main id="board-area">
     <div id="board-toolbar">
-      <span id="board-title">—</span>
+      <span id="board-title">-</span>
+      <div class="zoom-controls">
+        <button id="zoom-out-btn" class="btn-secondary">−</button>
+        <span id="zoom-label">100%</span>
+        <button id="zoom-in-btn" class="btn-secondary">+</button>
+        <button id="zoom-reset-btn" class="btn-secondary">Сброс</button>
+      </div>
       <button id="connect-btn" class="btn-secondary">Связать узлы</button>
       <button id="delete-board-btn" class="btn-danger">Удалить карту</button>
     </div>
     <div id="canvas-wrapper">
-      <svg id="edges-layer"></svg>
-      <div id="canvas"></div>
+      <div id="canvas-sizer">
+        <div id="canvas-content">
+          <svg id="edges-layer"></svg>
+          <div id="canvas"></div>
+        </div>
+      </div>
     </div>
   </main>
+</div>
+
+<div id="node-context-menu" class="context-menu hidden">
+  <div class="context-item" data-action="duplicate">Дублировать</div>
+  <div class="context-item danger" data-action="delete">Удалить</div>
 </div>
 
 <div id="node-modal" class="modal hidden">

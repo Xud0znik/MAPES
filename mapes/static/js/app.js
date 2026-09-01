@@ -6,7 +6,14 @@ const state = {
   connectMode: false,
   connectSource: null,
   editingNodeId: null,
+  zoom: 1,
 };
+
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 2;
+const ZOOM_STEP = 0.1;
+const BASE_W = 3000;
+const BASE_H = 2000;
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -53,7 +60,7 @@ function renderBoardList() {
 
 async function loadBoard(boardId) {
   const board = state.boards.find((b) => b.id === boardId);
-  $("#board-title").textContent = board ? board.name : "—";
+  $("#board-title").textContent = board ? board.name : "-";
   state.nodes = await api(`/api/boards/${boardId}/nodes`);
   state.edges = await api(`/api/boards/${boardId}/edges`);
   renderCanvas();
@@ -84,9 +91,43 @@ $("#delete-board-btn").onclick = async () => {
     state.nodes = [];
     state.edges = [];
     renderCanvas();
-    $("#board-title").textContent = "—";
+    $("#board-title").textContent = "-";
   }
 };
+
+// ---------- zoom ----------
+
+const canvasWrapper = $("#canvas-wrapper");
+const canvasSizer = $("#canvas-sizer");
+const canvasContent = $("#canvas-content");
+
+function applyZoom() {
+  canvasContent.style.transform = `scale(${state.zoom})`;
+  canvasSizer.style.width = `${BASE_W * state.zoom}px`;
+  canvasSizer.style.height = `${BASE_H * state.zoom}px`;
+  $("#zoom-label").textContent = `${Math.round(state.zoom * 100)}%`;
+}
+
+function setZoom(z) {
+  state.zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, +z.toFixed(2)));
+  applyZoom();
+}
+
+canvasWrapper.addEventListener(
+  "wheel",
+  (e) => {
+    if (!e.ctrlKey && !e.altKey) return;
+    e.preventDefault();
+    setZoom(state.zoom + (e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP));
+  },
+  { passive: false }
+);
+
+$("#zoom-in-btn").onclick = () => setZoom(state.zoom + ZOOM_STEP);
+$("#zoom-out-btn").onclick = () => setZoom(state.zoom - ZOOM_STEP);
+$("#zoom-reset-btn").onclick = () => setZoom(1);
+
+applyZoom();
 
 // ---------- canvas / nodes ----------
 
@@ -96,8 +137,8 @@ const edgesLayer = $("#edges-layer");
 canvas.addEventListener("dblclick", async (e) => {
   if (e.target !== canvas) return;
   const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+  const x = (e.clientX - rect.left) / state.zoom;
+  const y = (e.clientY - rect.top) / state.zoom;
   openNodeModal(null, { x, y });
 });
 
@@ -122,11 +163,20 @@ function buildNodeEl(node) {
   makeDraggable(el, node);
   el.addEventListener("click", (e) => {
     e.stopPropagation();
+    if (el._dragMoved) {
+      el._dragMoved = false;
+      return;
+    }
     if (state.connectMode) {
       handleConnectClick(node.id, el);
     } else {
       openNodeModal(node);
     }
+  });
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, node);
   });
   return el;
 }
@@ -134,10 +184,12 @@ function buildNodeEl(node) {
 function makeDraggable(el, node) {
   let dragging = false;
   let startX, startY, origLeft, origTop;
+  el._dragMoved = false;
 
   el.addEventListener("mousedown", (e) => {
-    if (state.connectMode) return;
+    if (state.connectMode || e.button !== 0) return;
     dragging = true;
+    el._dragMoved = false;
     startX = e.clientX;
     startY = e.clientY;
     origLeft = parseFloat(el.style.left);
@@ -148,8 +200,11 @@ function makeDraggable(el, node) {
 
   window.addEventListener("mousemove", (e) => {
     if (!dragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
+    const rawDx = e.clientX - startX;
+    const rawDy = e.clientY - startY;
+    if (Math.abs(rawDx) > 3 || Math.abs(rawDy) > 3) el._dragMoved = true;
+    const dx = rawDx / state.zoom;
+    const dy = rawDy / state.zoom;
     el.style.left = `${origLeft + dx}px`;
     el.style.top = `${origTop + dy}px`;
     renderEdges();
@@ -159,6 +214,7 @@ function makeDraggable(el, node) {
     if (!dragging) return;
     dragging = false;
     el.style.cursor = "grab";
+    if (!el._dragMoved) return;
     const x = parseFloat(el.style.left);
     const y = parseFloat(el.style.top);
     node.x = x;
@@ -236,6 +292,58 @@ async function handleConnectClick(nodeId, el) {
   }
 }
 
+// ---------- context menu ----------
+
+const contextMenu = $("#node-context-menu");
+let contextNode = null;
+
+function openContextMenu(clientX, clientY, node) {
+  contextNode = node;
+  contextMenu.style.left = `${clientX}px`;
+  contextMenu.style.top = `${clientY}px`;
+  contextMenu.classList.remove("hidden");
+}
+
+function closeContextMenu() {
+  contextMenu.classList.add("hidden");
+  contextNode = null;
+}
+
+document.addEventListener("click", () => closeContextMenu());
+window.addEventListener("blur", () => closeContextMenu());
+
+contextMenu.addEventListener("click", async (e) => {
+  const action = e.target.dataset.action;
+  if (!action || !contextNode) return;
+  e.stopPropagation();
+  if (action === "delete") {
+    if (confirm(`Удалить узел «${contextNode.title}»?`)) {
+      await api(`/api/nodes/${contextNode.id}`, { method: "DELETE" });
+      state.nodes = state.nodes.filter((n) => n.id !== contextNode.id);
+      state.edges = state.edges.filter(
+        (ed) => ed.source_id !== contextNode.id && ed.target_id !== contextNode.id
+      );
+      renderCanvas();
+    }
+  } else if (action === "duplicate") {
+    const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: `${contextNode.title} (копия)`,
+        type: contextNode.type,
+        color: contextNode.color,
+        tags: contextNode.tags,
+        content: contextNode.content,
+        x: contextNode.x + 30,
+        y: contextNode.y + 30,
+      }),
+    });
+    state.nodes.push(created);
+    renderCanvas();
+  }
+  closeContextMenu();
+});
+
 // ---------- node modal ----------
 
 function openNodeModal(node, defaults = {}) {
@@ -249,6 +357,7 @@ function openNodeModal(node, defaults = {}) {
   $("#node-delete").style.display = node ? "inline-block" : "none";
   $("#node-modal").dataset.x = node ? node.x : defaults.x;
   $("#node-modal").dataset.y = node ? node.y : defaults.y;
+  $("#node-modal").dataset.origColor = node ? node.color : "#4f8cff";
   $("#node-modal").classList.remove("hidden");
 }
 
@@ -257,7 +366,30 @@ function closeNodeModal() {
   state.editingNodeId = null;
 }
 
-$("#node-cancel").onclick = closeNodeModal;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("#node-modal").classList.contains("hidden")) {
+    revertLiveColor();
+    closeNodeModal();
+  }
+});
+
+function revertLiveColor() {
+  if (!state.editingNodeId) return;
+  const el = canvas.querySelector(`.node[data-id="${state.editingNodeId}"]`);
+  const orig = $("#node-modal").dataset.origColor;
+  if (el && orig) el.style.borderLeftColor = orig;
+}
+
+$("#node-color").addEventListener("input", (e) => {
+  if (!state.editingNodeId) return;
+  const el = canvas.querySelector(`.node[data-id="${state.editingNodeId}"]`);
+  if (el) el.style.borderLeftColor = e.target.value;
+});
+
+$("#node-cancel").onclick = () => {
+  revertLiveColor();
+  closeNodeModal();
+};
 
 $("#node-save").onclick = async () => {
   const payload = {
@@ -329,6 +461,81 @@ $("#search-input").addEventListener("input", (e) => {
       el.appendChild(div);
     });
   }, 250);
+});
+
+// ---------- export / import ----------
+
+$("#export-btn").onclick = () => {
+  if (!state.currentBoardId) return;
+  const board = state.boards.find((b) => b.id === state.currentBoardId);
+  const nodeIndex = new Map(state.nodes.map((n, i) => [n.id, i]));
+  const payload = {
+    format: "mapes-board",
+    version: 1,
+    board: { name: board.name, description: board.description },
+    nodes: state.nodes.map((n) => ({
+      type: n.type,
+      title: n.title,
+      content: n.content,
+      tags: n.tags,
+      color: n.color,
+      x: n.x,
+      y: n.y,
+    })),
+    edges: state.edges.map((e) => ({
+      source: nodeIndex.get(e.source_id),
+      target: nodeIndex.get(e.target_id),
+      label: e.label,
+    })),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${(board.name || "mapes-board").replace(/[^\w\-]+/g, "_")}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+$("#import-btn").onclick = () => $("#import-file").click();
+
+$("#import-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file || !state.currentBoardId) return;
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch (err) {
+    alert("Не удалось прочитать файл: некорректный JSON");
+    return;
+  }
+  if (!Array.isArray(data.nodes)) {
+    alert("Файл не похож на экспорт карты MAPES");
+    return;
+  }
+  const createdIds = [];
+  for (const n of data.nodes) {
+    const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+      method: "POST",
+      body: JSON.stringify(n),
+    });
+    createdIds.push(created.id);
+    state.nodes.push(created);
+  }
+  for (const e2 of data.edges || []) {
+    const sourceId = createdIds[e2.source];
+    const targetId = createdIds[e2.target];
+    if (!sourceId || !targetId) continue;
+    const edge = await api(`/api/boards/${state.currentBoardId}/edges`, {
+      method: "POST",
+      body: JSON.stringify({ source_id: sourceId, target_id: targetId, label: e2.label || "" }),
+    });
+    state.edges.push(edge);
+  }
+  renderCanvas();
 });
 
 function escapeHtml(str) {

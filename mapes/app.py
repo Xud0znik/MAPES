@@ -1,10 +1,16 @@
 from flask import Flask, jsonify, request, render_template
 
 from .db import get_connection, init_db
+from .paths import resource_root
 
 
 def create_app():
-    app = Flask(__name__)
+    root = resource_root()
+    app = Flask(
+        __name__,
+        template_folder=str(root / "templates"),
+        static_folder=str(root / "static"),
+    )
     init_db()
 
     # ---------- boards ----------

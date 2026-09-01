@@ -1,7 +1,8 @@
 import sqlite3
-from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+from .paths import app_dir
+
+DATA_DIR = app_dir() / "data"
 DB_PATH = DATA_DIR / "mapes.db"
 
 SCHEMA = """

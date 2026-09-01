@@ -1,9 +1,18 @@
 import sqlite3
+from pathlib import Path
 
 from .paths import app_dir
 
 DATA_DIR = app_dir() / "data"
 DB_PATH = DATA_DIR / "mapes.db"
+
+
+def configure(data_dir):
+    """Point the database at a different folder (chosen by the user at
+    startup). Must be called before init_db()/get_connection()."""
+    global DATA_DIR, DB_PATH
+    DATA_DIR = Path(data_dir)
+    DB_PATH = DATA_DIR / "mapes.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS boards (

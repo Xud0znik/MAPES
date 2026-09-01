@@ -4,4 +4,5 @@ __pycache__/
 venv/
 data/
 *.db
+mapes_config.json
 .DS_Store

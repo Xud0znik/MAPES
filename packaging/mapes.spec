@@ -15,6 +15,9 @@ a = Analysis(
     hiddenimports=[
         'webview.platforms.winforms',
         'webview.platforms.edgechromium',
+        'tkinter',
+        'tkinter.filedialog',
+        'tkinter.messagebox',
     ],
     hookspath=[],
     hooksconfig={},

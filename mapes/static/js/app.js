@@ -247,9 +247,10 @@ function buildNodeEl(node) {
   el.dataset.id = node.id;
   el.style.left = `${node.x}px`;
   el.style.top = `${node.y}px`;
-  el.style.borderLeftColor = node.color || "#4f8cff";
+  el.style.setProperty("--node-color", node.color || "#4f8cff");
   el.innerHTML = `
-    <div class="node-type">${NODE_ICONS[node.type] || NODE_ICONS.other} ${escapeHtml(node.type)}</div>
+    <div class="node-icon-badge">${NODE_ICONS[node.type] || NODE_ICONS.other}</div>
+    <div class="node-type">${escapeHtml(node.type)}</div>
     <div class="node-title">${escapeHtml(node.title)}</div>
     ${node.tags ? `<div class="node-tags">#${escapeHtml(node.tags).replace(/,\s*/g, " #")}</div>` : ""}
     <div class="node-badges"></div>
@@ -517,7 +518,7 @@ function openNodeModal(node, defaults = {}) {
   $("#node-modal").dataset.x = node ? node.x : defaults.x;
   $("#node-modal").dataset.y = node ? node.y : defaults.y;
   $("#node-modal").dataset.origColor = node ? node.color : "#4f8cff";
-  $("#node-modal").classList.remove("hidden");
+  $("#node-modal").classList.remove("hidden", "minimized");
 }
 
 function closeNodeModal() {
@@ -536,13 +537,13 @@ function revertLiveColor() {
   if (!state.editingNodeId) return;
   const el = canvas.querySelector(`.node[data-id="${state.editingNodeId}"]`);
   const orig = $("#node-modal").dataset.origColor;
-  if (el && orig) el.style.borderLeftColor = orig;
+  if (el && orig) el.style.setProperty("--node-color", orig);
 }
 
 $("#node-color").addEventListener("input", (e) => {
   if (!state.editingNodeId) return;
   const el = canvas.querySelector(`.node[data-id="${state.editingNodeId}"]`);
-  if (el) el.style.borderLeftColor = e.target.value;
+  if (el) el.style.setProperty("--node-color", e.target.value);
 });
 
 $("#node-cancel").onclick = () => {
@@ -866,6 +867,28 @@ function nodeTitle(nodeId) {
   return n ? n.title : "";
 }
 
+// Small removable "chip" shown under a node-link <select>, so the linked
+// node can be unlinked with one click instead of hunting it in the dropdown.
+// Wiring a select to its chip container also keeps them in sync both ways
+// (picking a new node in the dropdown updates the chip) and the select
+// itself already guarantees a node can only be linked once (single value).
+function wireNodeChip(select, chipContainer) {
+  const sync = () => {
+    const id = select.value;
+    if (!id) {
+      chipContainer.innerHTML = "";
+      return;
+    }
+    chipContainer.innerHTML = `<span class="node-chip">${escapeHtml(nodeTitle(id))} <button type="button" class="chip-x" title="Unlink">×</button></span>`;
+    chipContainer.querySelector(".chip-x").onclick = () => {
+      select.value = "";
+      sync();
+    };
+  };
+  select.onchange = sync;
+  sync();
+}
+
 // ---------- Vault (file attachments) ----------
 
 let editingCaptureId = null;
@@ -924,7 +947,8 @@ function openCaptureModal(cap) {
   $("#capture-caption").value = cap.caption || "";
   $("#capture-tags").value = cap.tags || "";
   populateNodeSelect($("#capture-node"), cap.node_id);
-  $("#capture-modal").classList.remove("hidden");
+  wireNodeChip($("#capture-node"), $("#capture-node-chip"));
+  $("#capture-modal").classList.remove("hidden", "minimized");
 }
 
 $("#capture-cancel").onclick = () => $("#capture-modal").classList.add("hidden");
@@ -1021,8 +1045,9 @@ function openCredModal(cred) {
   $("#cred-status").value = cred ? cred.status : "untested";
   $("#cred-notes").value = cred ? cred.notes : "";
   populateNodeSelect($("#cred-node"), cred ? cred.node_id : null);
+  wireNodeChip($("#cred-node"), $("#cred-node-chip"));
   $("#cred-delete").style.display = cred ? "inline-block" : "none";
-  $("#cred-modal").classList.remove("hidden");
+  $("#cred-modal").classList.remove("hidden", "minimized");
 }
 
 $("#cred-cancel").onclick = () => $("#cred-modal").classList.add("hidden");
@@ -1094,8 +1119,9 @@ function openFindingModal(f) {
   $("#finding-remediation").value = f ? f.remediation : "";
   $("#finding-refs").value = f ? f.refs : "";
   populateNodeSelect($("#finding-node"), f ? f.node_id : null);
+  wireNodeChip($("#finding-node"), $("#finding-node-chip"));
   $("#finding-delete").style.display = f ? "inline-block" : "none";
-  $("#finding-modal").classList.remove("hidden");
+  $("#finding-modal").classList.remove("hidden", "minimized");
 }
 
 $("#finding-cancel").onclick = () => $("#finding-modal").classList.add("hidden");
@@ -1272,6 +1298,35 @@ function inline(text) {
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
+
+// ---------- minimizable modal windows ----------
+
+const MODAL_CANCEL_BTN = {
+  "node-modal": "node-cancel",
+  "capture-modal": "capture-cancel",
+  "cred-modal": "cred-cancel",
+  "finding-modal": "finding-cancel",
+};
+
+document.addEventListener("click", (e) => {
+  const minBtn = e.target.closest(".modal-min-btn");
+  if (minBtn) {
+    e.stopPropagation();
+    $(`#${minBtn.dataset.modal}`).classList.toggle("minimized");
+    return;
+  }
+  const closeBtn = e.target.closest(".modal-close-btn");
+  if (closeBtn) {
+    e.stopPropagation();
+    const cancelId = MODAL_CANCEL_BTN[closeBtn.dataset.modal];
+    if (cancelId) $(`#${cancelId}`).click();
+    return;
+  }
+  const minimizedBox = e.target.closest(".modal.minimized .modal-box");
+  if (minimizedBox) {
+    minimizedBox.closest(".modal").classList.remove("minimized");
+  }
+});
 
 loadBoards();
 refreshFileStatus();

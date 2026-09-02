@@ -235,6 +235,12 @@ canvas.addEventListener("dblclick", async (e) => {
 });
 
 function renderCanvas() {
+  // A node picked as the "connect from" source may have just been deleted
+  // (directly, or via undo/redo) - drop the stale selection so a later click
+  // can't try to create an edge from/to a node id that no longer exists.
+  if (state.connectSource && !state.nodes.some((n) => n.id === state.connectSource)) {
+    state.connectSource = null;
+  }
   canvas.querySelectorAll(".node").forEach((n) => n.remove());
   state.nodes.forEach((node) => canvas.appendChild(buildNodeEl(node)));
   renderEdges();

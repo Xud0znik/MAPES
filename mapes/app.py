@@ -2,6 +2,7 @@ import base64
 import binascii
 import mimetypes
 import re
+import sqlite3
 from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, render_template
@@ -25,6 +26,22 @@ def create_app():
         static_folder=str(root / "static"),
     )
     init_db()
+
+    @app.errorhandler(sqlite3.IntegrityError)
+    def handle_integrity_error(err):
+        # Most commonly: a node referenced by an edge/capture/cred/finding was
+        # already deleted (stale id from a leftover UI selection). Report it
+        # as a normal 400 instead of a raw 500 page.
+        return jsonify({"error": "That node no longer exists - it may have been deleted."}), 400
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(err):
+        from werkzeug.exceptions import HTTPException
+
+        if isinstance(err, HTTPException):
+            return err
+        app.logger.exception("Unhandled error")
+        return jsonify({"error": str(err) or err.__class__.__name__}), 500
 
     # ---------- boards ----------
 

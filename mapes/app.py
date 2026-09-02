@@ -576,6 +576,29 @@ def create_app():
             return jsonify({"error": f"Could not save: {exc}"}), 400
         return jsonify({"path": linked})
 
+    # ---------- node badge counts (vault/creds/findings per node) ----------
+
+    @app.get("/api/boards/<int:board_id>/node-counts")
+    def node_counts(board_id):
+        conn = get_connection()
+        counts = {}
+
+        def _tally(table):
+            rows = conn.execute(
+                f"SELECT node_id, COUNT(*) AS c FROM {table} "
+                f"WHERE board_id = ? AND node_id IS NOT NULL GROUP BY node_id",
+                (board_id,),
+            ).fetchall()
+            for r in rows:
+                counts.setdefault(str(r["node_id"]), {"captures": 0, "creds": 0, "findings": 0})
+                counts[str(r["node_id"])][table] = r["c"]
+
+        _tally("captures")
+        _tally("creds")
+        _tally("findings")
+        conn.close()
+        return jsonify(counts)
+
     # ---------- search ----------
 
     @app.get("/api/boards/<int:board_id>/search")

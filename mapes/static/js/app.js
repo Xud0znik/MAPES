@@ -3,6 +3,7 @@ const state = {
   currentBoardId: null,
   nodes: [],
   edges: [],
+  nodeCounts: {},
   connectMode: false,
   connectSource: null,
   editingNodeId: null,
@@ -72,8 +73,19 @@ async function loadBoard(boardId) {
   $("#board-title").textContent = board ? board.name : "-";
   state.nodes = await api(`/api/boards/${boardId}/nodes`);
   state.edges = await api(`/api/boards/${boardId}/edges`);
+  state.nodeCounts = await api(`/api/boards/${boardId}/node-counts`);
+  resetHistory();
   renderCanvas();
   await refreshCurrentView();
+}
+
+async function refreshNodeCounts() {
+  if (!state.currentBoardId) return;
+  state.nodeCounts = await api(`/api/boards/${state.currentBoardId}/node-counts`);
+  canvas.querySelectorAll(".node").forEach((el) => {
+    const node = state.nodes.find((n) => String(n.id) === el.dataset.id);
+    if (node) updateNodeBadges(el, node);
+  });
 }
 
 $("#new-board-btn").onclick = async () => {
@@ -137,7 +149,77 @@ $("#zoom-in-btn").onclick = () => setZoom(state.zoom + ZOOM_STEP);
 $("#zoom-out-btn").onclick = () => setZoom(state.zoom - ZOOM_STEP);
 $("#zoom-reset-btn").onclick = () => setZoom(1);
 
+$("#zoom-fit-btn").onclick = () => {
+  if (!state.nodes.length) return;
+  const pad = 60;
+  const xs = state.nodes.map((n) => n.x);
+  const ys = state.nodes.map((n) => n.y);
+  const minX = Math.min(...xs) - pad;
+  const minY = Math.min(...ys) - pad;
+  const maxX = Math.max(...xs) + 180 + pad;
+  const maxY = Math.max(...ys) + 90 + pad;
+  const boxW = maxX - minX;
+  const boxH = maxY - minY;
+  const availW = canvasWrapper.clientWidth;
+  const availH = canvasWrapper.clientHeight;
+  setZoom(Math.min(availW / boxW, availH / boxH, ZOOM_MAX));
+  canvasWrapper.scrollLeft = minX * state.zoom;
+  canvasWrapper.scrollTop = minY * state.zoom;
+};
+
 applyZoom();
+
+// ---------- undo / redo ----------
+
+let historyStack = [];
+let historyIndex = -1;
+
+function resetHistory() {
+  historyStack = [];
+  historyIndex = -1;
+  updateHistoryButtons();
+}
+
+function pushHistory(action) {
+  historyStack = historyStack.slice(0, historyIndex + 1);
+  historyStack.push(action);
+  historyIndex++;
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  $("#undo-btn").disabled = historyIndex < 0;
+  $("#redo-btn").disabled = historyIndex >= historyStack.length - 1;
+}
+
+async function undo() {
+  if (historyIndex < 0) return;
+  await historyStack[historyIndex].undo();
+  historyIndex--;
+  updateHistoryButtons();
+}
+
+async function redo() {
+  if (historyIndex >= historyStack.length - 1) return;
+  historyIndex++;
+  await historyStack[historyIndex].redo();
+  updateHistoryButtons();
+}
+
+$("#undo-btn").onclick = undo;
+$("#redo-btn").onclick = redo;
+
+document.addEventListener("keydown", (e) => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  } else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === "y" || (e.shiftKey && e.key.toLowerCase() === "z"))) {
+    e.preventDefault();
+    redo();
+  }
+});
 
 // ---------- canvas / nodes ----------
 
@@ -170,7 +252,9 @@ function buildNodeEl(node) {
     <div class="node-type">${NODE_ICONS[node.type] || NODE_ICONS.other} ${escapeHtml(node.type)}</div>
     <div class="node-title">${escapeHtml(node.title)}</div>
     ${node.tags ? `<div class="node-tags">#${escapeHtml(node.tags).replace(/,\s*/g, " #")}</div>` : ""}
+    <div class="node-badges"></div>
   `;
+  updateNodeBadges(el, node);
   makeDraggable(el, node);
   el.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -190,6 +274,22 @@ function buildNodeEl(node) {
     openContextMenu(e.clientX, e.clientY, node);
   });
   return el;
+}
+
+function updateNodeBadges(el, node) {
+  const counts = state.nodeCounts[String(node.id)];
+  const badgesEl = el.querySelector(".node-badges");
+  if (!badgesEl) return;
+  if (!counts || (!counts.captures && !counts.creds && !counts.findings)) {
+    badgesEl.style.display = "none";
+    return;
+  }
+  badgesEl.style.display = "flex";
+  const parts = [];
+  if (counts.captures) parts.push(`<span class="node-badge">🖼 ${counts.captures}</span>`);
+  if (counts.creds) parts.push(`<span class="node-badge">🔑 ${counts.creds}</span>`);
+  if (counts.findings) parts.push(`<span class="node-badge">⚑ ${counts.findings}</span>`);
+  badgesEl.innerHTML = parts.join("");
 }
 
 function makeDraggable(el, node) {
@@ -228,11 +328,24 @@ function makeDraggable(el, node) {
     if (!el._dragMoved) return;
     const x = parseFloat(el.style.left);
     const y = parseFloat(el.style.top);
+    const from = { x: origLeft, y: origTop };
+    const to = { x, y };
     node.x = x;
     node.y = y;
-    await api(`/api/nodes/${node.id}`, {
-      method: "PUT",
-      body: JSON.stringify({ x, y }),
+    await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify(to) });
+    pushHistory({
+      undo: async () => {
+        node.x = from.x; node.y = from.y;
+        el.style.left = `${from.x}px`; el.style.top = `${from.y}px`;
+        await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify(from) });
+        renderEdges();
+      },
+      redo: async () => {
+        node.x = to.x; node.y = to.y;
+        el.style.left = `${to.x}px`; el.style.top = `${to.y}px`;
+        await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify(to) });
+        renderEdges();
+      },
     });
   });
 }
@@ -262,6 +375,22 @@ function renderEdges() {
         await api(`/api/edges/${edge.id}`, { method: "DELETE" });
         state.edges = state.edges.filter((x) => x.id !== edge.id);
         renderEdges();
+        pushHistory({
+          undo: async () => {
+            const recreated = await api(`/api/boards/${state.currentBoardId}/edges`, {
+              method: "POST",
+              body: JSON.stringify({ source_id: edge.source_id, target_id: edge.target_id, label: edge.label }),
+            });
+            edge.id = recreated.id;
+            state.edges.push(recreated);
+            renderEdges();
+          },
+          redo: async () => {
+            await api(`/api/edges/${edge.id}`, { method: "DELETE" });
+            state.edges = state.edges.filter((x) => x.id !== edge.id);
+            renderEdges();
+          },
+        });
       }
     });
     edgesLayer.appendChild(line);
@@ -300,6 +429,22 @@ async function handleConnectClick(nodeId, el) {
   if (edge) {
     state.edges.push(edge);
     renderEdges();
+    pushHistory({
+      undo: async () => {
+        await api(`/api/edges/${edge.id}`, { method: "DELETE" });
+        state.edges = state.edges.filter((x) => x.id !== edge.id);
+        renderEdges();
+      },
+      redo: async () => {
+        const recreated = await api(`/api/boards/${state.currentBoardId}/edges`, {
+          method: "POST",
+          body: JSON.stringify({ source_id: edge.source_id, target_id: edge.target_id, label: edge.label }),
+        });
+        edge.id = recreated.id;
+        state.edges.push(recreated);
+        renderEdges();
+      },
+    });
   }
 }
 
@@ -329,11 +474,13 @@ contextMenu.addEventListener("click", async (e) => {
   e.stopPropagation();
   if (action === "delete") {
     if (confirm(`Delete node "${contextNode.title}"?`)) {
+      const nodeRef = { ...contextNode };
       await api(`/api/nodes/${contextNode.id}`, { method: "DELETE" });
       state.nodes = state.nodes.filter((n) => n.id !== contextNode.id);
       state.edges = state.edges.filter(
         (ed) => ed.source_id !== contextNode.id && ed.target_id !== contextNode.id
       );
+      pushHistory(makeDeleteNodeAction(nodeRef));
       renderCanvas();
     }
   } else if (action === "duplicate") {
@@ -350,6 +497,7 @@ contextMenu.addEventListener("click", async (e) => {
       }),
     });
     state.nodes.push(created);
+    pushHistory(makeCreateNodeAction(created));
     renderCanvas();
   }
   closeContextMenu();
@@ -425,19 +573,69 @@ $("#node-save").onclick = async () => {
       body: JSON.stringify(payload),
     });
     state.nodes.push(created);
+    pushHistory(makeCreateNodeAction(created));
   }
   closeNodeModal();
   renderCanvas();
 };
 
+function makeCreateNodeAction(nodeRef) {
+  return {
+    undo: async () => {
+      await api(`/api/nodes/${nodeRef.id}`, { method: "DELETE" });
+      state.nodes = state.nodes.filter((n) => n.id !== nodeRef.id);
+      state.edges = state.edges.filter((e) => e.source_id !== nodeRef.id && e.target_id !== nodeRef.id);
+      renderCanvas();
+    },
+    redo: async () => {
+      const recreated = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: nodeRef.title, type: nodeRef.type, color: nodeRef.color,
+          tags: nodeRef.tags, content: nodeRef.content, x: nodeRef.x, y: nodeRef.y,
+        }),
+      });
+      nodeRef.id = recreated.id;
+      state.nodes.push(recreated);
+      renderCanvas();
+    },
+  };
+}
+
+function makeDeleteNodeAction(nodeRef) {
+  return {
+    undo: async () => {
+      const recreated = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: nodeRef.title, type: nodeRef.type, color: nodeRef.color,
+          tags: nodeRef.tags, content: nodeRef.content, x: nodeRef.x, y: nodeRef.y,
+        }),
+      });
+      nodeRef.id = recreated.id;
+      state.nodes.push(recreated);
+      renderCanvas();
+      await refreshNodeCounts();
+    },
+    redo: async () => {
+      await api(`/api/nodes/${nodeRef.id}`, { method: "DELETE" });
+      state.nodes = state.nodes.filter((n) => n.id !== nodeRef.id);
+      state.edges = state.edges.filter((e) => e.source_id !== nodeRef.id && e.target_id !== nodeRef.id);
+      renderCanvas();
+    },
+  };
+}
+
 $("#node-delete").onclick = async () => {
   if (!state.editingNodeId) return;
   if (!confirm("Delete this node and its connections?")) return;
+  const nodeRef = state.nodes.find((n) => n.id === state.editingNodeId);
   await api(`/api/nodes/${state.editingNodeId}`, { method: "DELETE" });
   state.nodes = state.nodes.filter((n) => n.id !== state.editingNodeId);
   state.edges = state.edges.filter(
     (e) => e.source_id !== state.editingNodeId && e.target_id !== state.editingNodeId
   );
+  if (nodeRef) pushHistory(makeDeleteNodeAction({ ...nodeRef }));
   closeNodeModal();
   renderCanvas();
 };
@@ -742,6 +940,7 @@ $("#capture-save").onclick = async () => {
   });
   $("#capture-modal").classList.add("hidden");
   await loadVault();
+  await refreshNodeCounts();
 };
 
 $("#capture-delete").onclick = async () => {
@@ -749,6 +948,7 @@ $("#capture-delete").onclick = async () => {
   await api(`/api/captures/${editingCaptureId}`, { method: "DELETE" });
   $("#capture-modal").classList.add("hidden");
   await loadVault();
+  await refreshNodeCounts();
 };
 
 // ---------- Credentials ----------
@@ -767,12 +967,45 @@ async function loadCreds() {
       <td>${escapeHtml(cred.kind)}</td>
       <td><span class="status-badge ${cred.status}">${escapeHtml(cred.status)}</span></td>
       <td>${escapeHtml(nodeTitle(cred.node_id) || "-")}</td>
-      <td class="secret-cell">${cred.has_secret ? "••••••" : "-"}</td>
+      <td class="secret-cell">
+        ${cred.has_secret
+          ? `<span class="secret-value" data-secret-for="${cred.id}">••••••</span>
+             <button class="row-action" data-action="reveal" data-id="${cred.id}" title="Show/hide">👁</button>
+             <button class="row-action" data-action="copy" data-id="${cred.id}" title="Copy">📋</button>`
+          : "-"}
+      </td>
     `;
     tr.onclick = () => openCredModal(cred);
     tbody.appendChild(tr);
   });
 }
+
+$("#creds-tbody").addEventListener("click", async (e) => {
+  const btn = e.target.closest(".row-action");
+  if (!btn) return;
+  e.stopPropagation();
+  const id = btn.dataset.id;
+  const valueEl = document.querySelector(`[data-secret-for="${id}"]`);
+  if (btn.dataset.action === "reveal") {
+    if (valueEl.dataset.revealed === "1") {
+      valueEl.textContent = "••••••";
+      valueEl.dataset.revealed = "0";
+    } else {
+      const { secret } = await api(`/api/creds/${id}/reveal`);
+      valueEl.textContent = secret || "(empty)";
+      valueEl.dataset.revealed = "1";
+    }
+  } else if (btn.dataset.action === "copy") {
+    const { secret } = await api(`/api/creds/${id}/reveal`);
+    try {
+      await navigator.clipboard.writeText(secret || "");
+      btn.textContent = "✓";
+      setTimeout(() => { btn.textContent = "📋"; }, 1000);
+    } catch {
+      alert("Could not copy to clipboard");
+    }
+  }
+});
 
 $("#creds-add-btn").onclick = () => openCredModal(null);
 
@@ -813,6 +1046,7 @@ $("#cred-save").onclick = async () => {
   }
   $("#cred-modal").classList.add("hidden");
   await loadCreds();
+  await refreshNodeCounts();
 };
 
 $("#cred-delete").onclick = async () => {
@@ -820,6 +1054,7 @@ $("#cred-delete").onclick = async () => {
   await api(`/api/creds/${editingCredId}`, { method: "DELETE" });
   $("#cred-modal").classList.add("hidden");
   await loadCreds();
+  await refreshNodeCounts();
 };
 
 // ---------- Findings ----------
@@ -884,6 +1119,7 @@ $("#finding-save").onclick = async () => {
   }
   $("#finding-modal").classList.add("hidden");
   await loadFindings();
+  await refreshNodeCounts();
 };
 
 $("#finding-delete").onclick = async () => {
@@ -891,6 +1127,7 @@ $("#finding-delete").onclick = async () => {
   await api(`/api/findings/${editingFindingId}`, { method: "DELETE" });
   $("#finding-modal").classList.add("hidden");
   await loadFindings();
+  await refreshNodeCounts();
 };
 
 // ---------- Reports (markdown docs) ----------

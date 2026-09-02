@@ -40,6 +40,42 @@ const $ = (sel) => document.querySelector(sel);
 // real external browser - same class of issue as file downloads - so use
 // the native bridge when it's available, and fall back to window.open for
 // the plain-browser-tab mode.
+async function copyToClipboardWithFeedback(text, el) {
+  try {
+    await navigator.clipboard.writeText(text);
+    const original = el.innerHTML;
+    el.classList.add("copied");
+    el.textContent = "✓ Copied";
+    setTimeout(() => {
+      el.innerHTML = original;
+      el.classList.remove("copied");
+    }, 900);
+  } catch {
+    alert("Could not copy to clipboard");
+  }
+}
+
+function openLocalPath(path) {
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.open_path) {
+    window.pywebview.api.open_path(path);
+  } else {
+    alert("Opening a local file/folder only works in the desktop app, not in a browser tab.");
+  }
+}
+
+// Per node-type, what a single click on its highlighted content line does -
+// each type behaves differently instead of every type just opening the
+// same edit modal for a click on the card.
+const QUICK_ACTIONS = {
+  link: { icon: "🔗", title: "Open in browser", run: (v) => openExternalUrl(v), className: "" },
+  host: { icon: "📋", title: "Copy to clipboard", run: (v, el) => copyToClipboardWithFeedback(v, el), className: "mono" },
+  account: { icon: "📋", title: "Copy username", run: (v, el) => copyToClipboardWithFeedback(v, el), className: "" },
+  // direction:rtl (via the "rtl" class) truncates a long path from the
+  // *front*, so an overflowing path still ends by showing the actual
+  // filename instead of just its drive/leading folders.
+  file: { icon: "📂", title: "Open in file explorer", run: (v) => openLocalPath(v), className: "mono rtl" },
+};
+
 function openExternalUrl(url) {
   if (!url) return;
   const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
@@ -441,14 +477,14 @@ function buildNodeEl(node) {
     return buildZoneNodeEl(el, node);
   }
 
-  const isLink = node.type === "link";
+  const action = QUICK_ACTIONS[node.type];
   el.innerHTML = `
     <div class="node-icon-badge">${NODE_ICONS[node.type] || NODE_ICONS.other}</div>
     <div class="node-type">${escapeHtml(node.type)}</div>
     <div class="node-title">${escapeHtml(node.title)}</div>
     ${node.tags ? `<div class="node-tags">#${escapeHtml(node.tags).replace(/,\s*/g, " #")}</div>` : ""}
     ${isNote ? `<div class="node-quick-text" data-placeholder="Click to write...">${escapeHtml(node.content || "")}</div>` : ""}
-    ${isLink && node.content ? `<div class="node-link-url" title="Open in browser">${escapeHtml(node.content)}</div>` : ""}
+    ${action && node.content ? `<div class="node-quick-action ${action.className}" title="${action.title}">${action.icon} ${escapeHtml(node.content)}</div>` : ""}
     <div class="node-badges"></div>
   `;
   updateNodeBadges(el, node);
@@ -461,14 +497,14 @@ function buildNodeEl(node) {
       startQuickNoteEdit(quickText, node);
     });
   }
-  if (isLink) {
-    const linkEl = el.querySelector(".node-link-url");
-    if (linkEl) {
-      linkEl.addEventListener("mousedown", (e) => e.stopPropagation());
-      linkEl.addEventListener("click", (e) => {
+  if (action) {
+    const actionEl = el.querySelector(".node-quick-action");
+    if (actionEl) {
+      actionEl.addEventListener("mousedown", (e) => e.stopPropagation());
+      actionEl.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (el._dragMoved) { el._dragMoved = false; return; }
-        openExternalUrl(node.content);
+        await action.run(node.content, actionEl);
       });
     }
   }
@@ -1069,17 +1105,17 @@ const TYPE_DEFAULT_COLOR = {
 // "Content" means something different depending on type - a URL for Link,
 // so the field is relabeled (and the textarea swapped for how it's used)
 // to match, instead of every type looking like the exact same form.
+const CONTENT_FIELD_BY_TYPE = {
+  link: { label: "URL", placeholder: "https://example.com/...", rows: 2 },
+  host: { label: "IP / Hostname", placeholder: "10.0.0.5 or server.local", rows: 2 },
+  account: { label: "Username", placeholder: "e.g. admin - keep the password in Credentials instead", rows: 2 },
+  file: { label: "File / folder path", placeholder: "C:\\path\\to\\file or /path/to/file", rows: 2 },
+};
 function updateContentFieldForType() {
-  const type = $("#node-type").value;
-  if (type === "link") {
-    $("#node-content-label").textContent = "URL";
-    $("#node-content").placeholder = "https://example.com/...";
-    $("#node-content").rows = 2;
-  } else {
-    $("#node-content-label").textContent = "Content";
-    $("#node-content").placeholder = "";
-    $("#node-content").rows = 8;
-  }
+  const cfg = CONTENT_FIELD_BY_TYPE[$("#node-type").value];
+  $("#node-content-label").textContent = cfg ? cfg.label : "Content";
+  $("#node-content").placeholder = cfg ? cfg.placeholder : "";
+  $("#node-content").rows = cfg ? cfg.rows : 8;
 }
 
 function openNodeModal(node, defaults = {}) {
@@ -2013,19 +2049,57 @@ function renderMarkdown(src) {
   let inCode = false;
   let codeBuf = [];
 
+  let tableRows = null; // array of arrays of cell text while inside a table
+
   const closeList = () => { if (inList) { html.push("</ul>"); inList = false; } };
   const closeQuote = () => { if (inQuote) { html.push("</blockquote>"); inQuote = false; } };
   const flushCode = () => { html.push(`<pre><code>${escapeHtml(codeBuf.join("\n"))}</code></pre>`); codeBuf = []; };
+  const splitTableRow = (line) => {
+    let s = line.trim();
+    if (s.startsWith("|")) s = s.slice(1);
+    if (s.endsWith("|")) s = s.slice(0, -1);
+    return s.split("|").map((c) => c.trim());
+  };
+  const isTableSeparator = (line) => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line);
+  const flushTable = () => {
+    if (!tableRows || !tableRows.length) { tableRows = null; return; }
+    const [header, ...body] = tableRows;
+    html.push(
+      "<table class='md-table'><thead><tr>" +
+        header.map((c) => `<th>${inline(c)}</th>`).join("") +
+        "</tr></thead><tbody>" +
+        body.map((row) => "<tr>" + row.map((c) => `<td>${inline(c)}</td>`).join("") + "</tr>").join("") +
+        "</tbody></table>"
+    );
+    tableRows = null;
+  };
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
 
     if (line.trim().startsWith("```")) {
+      flushTable();
       if (inCode) { inCode = false; flushCode(); }
       else { closeList(); closeQuote(); inCode = true; codeBuf = []; }
       continue;
     }
     if (inCode) { codeBuf.push(line); continue; }
+
+    // GitHub-style table: a "| a | b |" row immediately followed by a
+    // "| --- | --- |" separator row starts one; every following row with a
+    // "|" in it is another row, until a line without one ends it.
+    if (tableRows) {
+      if (line.includes("|") && line.trim() !== "") {
+        tableRows.push(splitTableRow(line));
+        continue;
+      }
+      flushTable();
+    } else if (line.includes("|") && rawLines[i + 1] !== undefined && isTableSeparator(rawLines[i + 1])) {
+      closeList(); closeQuote();
+      tableRows = [splitTableRow(line)];
+      i++; // consume the separator row
+      continue;
+    }
 
     const heading = line.match(/^(#{1,6})\s+(.*)$/);
     // "- [ ] text" / "- [x] text" checklist items render as a live, clickable
@@ -2063,6 +2137,7 @@ function renderMarkdown(src) {
     }
   }
   if (inCode) flushCode(); // unterminated fence - still show what's there
+  flushTable();
   closeList(); closeQuote();
 
   return html.join("\n");

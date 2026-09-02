@@ -14,6 +14,8 @@ just opens in a browser tab on localhost instead.
 """
 import os
 import socket
+import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -147,6 +149,26 @@ class Api:
         instead, same class of issue as file downloads."""
         try:
             webbrowser.open(url, new=2)
+            return True
+        except Exception as exc:
+            return f"error: {exc}"
+
+    def open_path(self, path):
+        """Open a local file or folder with whatever the OS's default
+        handler for it is (Explorer/Finder/xdg-open) - there's no way to
+        do this from a browser tab at all (for good reason - a webpage
+        launching arbitrary local files would be a huge security hole),
+        so this only works in the desktop app, never the browser fallback."""
+        try:
+            p = Path(path).expanduser()
+            if not p.exists():
+                return f"error: path does not exist: {p}"
+            if sys.platform.startswith("win"):
+                os.startfile(str(p))  # noqa: S606 - user's own explicit action
+            elif sys.platform == "darwin":
+                subprocess.run(["open", str(p)], check=False)
+            else:
+                subprocess.run(["xdg-open", str(p)], check=False)
             return True
         except Exception as exc:
             return f"error: {exc}"

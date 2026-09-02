@@ -25,6 +25,19 @@ def create_app():
         template_folder=str(root / "templates"),
         static_folder=str(root / "static"),
     )
+    # This app only ever runs as a single local desktop window (pywebview's
+    # WebView2/WebKit view keeps its own persistent HTTP cache across
+    # restarts, like a normal browser profile), so caching static files at
+    # all just means CSS/JS fixes silently keep not applying after an
+    # update - there's no CDN or multi-user traffic here to actually
+    # benefit from it. Always serve the current file from disk.
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+    @app.after_request
+    def _no_cache(response):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        return response
+
     init_db()
 
     @app.teardown_appcontext

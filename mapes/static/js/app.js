@@ -1777,11 +1777,32 @@ $("#doc-save-btn").onclick = async () => {
   await loadDocs();
 };
 
-$("#doc-export-btn").onclick = () => {
+$("#doc-export-btn").onclick = async () => {
   if (!currentDocId) return;
+  const res = await fetch(`/api/docs/${currentDocId}/export.md`);
+  const text = await res.text();
+  const filename = `${($("#doc-title-input").value || "report").replace(/[^\w\-]+/g, "_")}.md`;
+
+  // Same as "Export board to JSON": inside the native app window a plain
+  // <a href> click to a download URL doesn't reliably do anything, so use
+  // the native save dialog + explicit file write instead.
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_export_md_file) {
+    const path = await window.pywebview.api.pick_export_md_file(filename);
+    if (!path) return;
+    const result = await window.pywebview.api.write_text_file(path, text);
+    if (result !== true) alert(`Could not write the file: ${result}`);
+    return;
+  }
+
+  const blob = new Blob([text], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = `/api/docs/${currentDocId}/export.md`;
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
   a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 };
 
 $("#doc-delete-btn").onclick = async () => {

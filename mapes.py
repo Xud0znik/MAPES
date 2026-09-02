@@ -100,12 +100,18 @@ class Api:
             return None
 
     def pick_export_json_file(self, default_name):
-        """For "Export board to JSON" - pick a destination .json file.
+        """For "Export board to JSON" - pick a destination .json file."""
+        return self._pick_export_file(default_name, "mapes-board.json", "JSON", "*.json")
 
-        Native app windows (pywebview) don't reliably support a plain HTML
-        <a download> click the way a real browser tab does, so exporting
-        needs this same native-picker + explicit-write approach as
-        Save As, instead of a browser-only download trick."""
+    def pick_export_md_file(self, default_name):
+        """For "Export .md" - pick a destination .md file."""
+        return self._pick_export_file(default_name, "report.md", "Markdown", "*.md")
+
+    def _pick_export_file(self, default_name, fallback_name, filter_label, filter_pattern):
+        """Native app windows (pywebview) don't reliably support a plain
+        HTML <a download>/<a href> click the way a real browser tab does -
+        exporting anything needs this same native-picker + explicit-write
+        approach as Save As, instead of a browser-only download trick."""
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -113,11 +119,12 @@ class Api:
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
+            ext = Path(fallback_name).suffix
             chosen = filedialog.asksaveasfilename(
-                title="Export board to JSON",
-                defaultextension=".json",
-                filetypes=[("JSON", "*.json"), ("All files", "*.*")],
-                initialfile=default_name or "mapes-board.json",
+                title=f"Export to {filter_label}",
+                defaultextension=ext,
+                filetypes=[(filter_label, filter_pattern), ("All files", "*.*")],
+                initialfile=default_name or fallback_name,
             )
             root.destroy()
             return chosen or None

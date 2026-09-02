@@ -140,6 +140,17 @@ class Api:
         except Exception as exc:
             return f"error: {exc}"
 
+    def open_external(self, url):
+        """Open a URL in the system's actual default browser - a plain
+        window.open()/<a target=_blank> inside pywebview's embedded view
+        would just navigate (or do nothing) inside the app's own window
+        instead, same class of issue as file downloads."""
+        try:
+            webbrowser.open(url, new=2)
+            return True
+        except Exception as exc:
+            return f"error: {exc}"
+
 
 def main():
     data_dir = resolve_data_dir()

@@ -77,7 +77,9 @@
         <span class="toolbar-sep"></span>
         <button id="add-note-btn" class="btn-ghost">🗒 Add note</button>
         <button id="add-tasks-btn" class="btn-ghost">☑ Tasks</button>
+        <button id="add-zone-btn" class="btn-ghost">▭ Zone</button>
         <button id="connect-btn" class="btn-ghost">⌁ Connect nodes</button>
+        <button id="fullscreen-btn" class="icon-btn" title="Hide sidebar (fullscreen canvas)">⛶</button>
         <button id="delete-board-btn" class="btn-ghost danger">Delete board</button>
       </div>
       <div id="canvas-wrapper">
@@ -167,14 +169,25 @@
       <option value="account">🔑 Account / password</option>
       <option value="link">🔗 Link</option>
       <option value="file">📄 File / path</option>
-      <option value="other">▫ Other</option>
+      <option value="other">✦ Other</option>
+      <!-- Not offered when creating a node - these are only ever made via
+           their dedicated toolbar tools (Add note.../Tasks/Zone/pasting an
+           image) - but need a matching <option> so editing one of them
+           (title/color) doesn't silently change its type on save, since a
+           <select> with no matching option just falls back to the first one. -->
+      <option value="tasks" hidden>☑ Tasks</option>
+      <option value="zone" hidden>▭ Zone</option>
+      <option value="image" hidden>🖼 Image</option>
     </select>
     <label>Color</label>
-    <input id="node-color" type="color" value="#4f8cff">
+    <div class="color-row">
+      <input id="node-color" type="color" value="#4f8cff">
+      <div id="color-presets" class="color-presets"></div>
+    </div>
     <label>Tags (comma-separated)</label>
     <input id="node-tags" type="text">
-    <label>Content</label>
-    <textarea id="node-content" rows="8"></textarea>
+    <label id="node-content-label">Content</label>
+    <textarea id="node-content" rows="8" placeholder=""></textarea>
     </div>
     <div class="modal-actions">
       <button id="node-delete" class="btn-danger">Delete</button>

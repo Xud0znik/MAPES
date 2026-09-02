@@ -8,6 +8,7 @@ const state = {
   connectSource: null,
   addNoteMode: false,
   addTasksMode: false,
+  addZoneMode: false,
   minimizedImageIds: new Set(),
   editingNodeId: null,
   zoom: 1,
@@ -28,9 +29,26 @@ const NODE_ICONS = {
   other: "✦",
   image: "🖼",
   tasks: "☑",
+  zone: "▭",
 };
 
 const $ = (sel) => document.querySelector(sel);
+
+// Opens a URL in the system's actual default browser. Inside the native app
+// window, window.open()/target=_blank just navigates (or silently does
+// nothing) within pywebview's own embedded view instead of launching a
+// real external browser - same class of issue as file downloads - so use
+// the native bridge when it's available, and fall back to window.open for
+// the plain-browser-tab mode.
+function openExternalUrl(url) {
+  if (!url) return;
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : `https://${url}`;
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.open_external) {
+    window.pywebview.api.open_external(withScheme);
+  } else {
+    window.open(withScheme, "_blank", "noopener");
+  }
+}
 
 async function api(path, opts) {
   const res = await fetch(path, {
@@ -244,31 +262,46 @@ canvas.addEventListener("dblclick", async (e) => {
 // start typing immediately - no modal, no double-click precision needed.
 // Stays armed so several notes can be placed in a row; click the button
 // again (or Esc) to turn it off.
-$("#add-note-btn").onclick = () => {
-  state.addNoteMode = !state.addNoteMode;
-  state.addTasksMode = false;
-  $("#add-note-btn").classList.toggle("active", state.addNoteMode);
-  $("#add-tasks-btn").classList.remove("active");
-  canvasWrapper.classList.toggle("note-tool-active", state.addNoteMode);
+// Three "click to arm, then click the board to place one" tools, mutually
+// exclusive - arming one disarms the others.
+const PLACE_TOOLS = {
+  note: { stateKey: "addNoteMode", btn: "#add-note-btn" },
+  tasks: { stateKey: "addTasksMode", btn: "#add-tasks-btn" },
+  zone: { stateKey: "addZoneMode", btn: "#add-zone-btn" },
 };
-
-// Same idea as the sticky-note tool, but drops a checklist card: click to
-// arm, click the board to place one, then type the first task and keep
-// adding more right on the card - connects to other nodes like any other.
-$("#add-tasks-btn").onclick = () => {
-  state.addTasksMode = !state.addTasksMode;
-  state.addNoteMode = false;
-  $("#add-tasks-btn").classList.toggle("active", state.addTasksMode);
-  $("#add-note-btn").classList.remove("active");
-  canvasWrapper.classList.toggle("note-tool-active", state.addTasksMode);
-};
+function armPlaceTool(name) {
+  const turningOn = !state[PLACE_TOOLS[name].stateKey];
+  Object.entries(PLACE_TOOLS).forEach(([key, tool]) => {
+    state[tool.stateKey] = key === name && turningOn;
+    $(tool.btn).classList.toggle("active", state[tool.stateKey]);
+  });
+  const anyOn = Object.values(PLACE_TOOLS).some((t) => state[t.stateKey]);
+  canvasWrapper.classList.toggle("note-tool-active", anyOn);
+}
+$("#add-note-btn").onclick = () => armPlaceTool("note");
+$("#add-tasks-btn").onclick = () => armPlaceTool("tasks");
+// A "zone" is a big rectangle drawn behind other nodes to visually group
+// ones about the same topic - drag its corner to resize, drag its label to
+// move it, click the label to rename/recolor it.
+$("#add-zone-btn").onclick = () => armPlaceTool("zone");
 
 canvas.addEventListener("click", async (e) => {
   if (e.target !== canvas) return;
-  if (!state.addNoteMode && !state.addTasksMode) return;
+  if (!state.addNoteMode && !state.addTasksMode && !state.addZoneMode) return;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / state.zoom - 95;
   const y = (e.clientY - rect.top) / state.zoom - 20;
+
+  if (state.addZoneMode) {
+    const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Zone", type: "zone", color: "#5b8cff", x, y, width: 320, height: 220 }),
+    });
+    state.nodes.push(created);
+    pushHistory(makeCreateNodeAction(created));
+    renderCanvas();
+    return;
+  }
   if (state.addTasksMode) {
     const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
       method: "POST",
@@ -293,12 +326,23 @@ canvas.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && (state.addNoteMode || state.addTasksMode)) {
-    state.addNoteMode = false;
-    state.addTasksMode = false;
-    $("#add-note-btn").classList.remove("active");
-    $("#add-tasks-btn").classList.remove("active");
+  if (e.key === "Escape" && (state.addNoteMode || state.addTasksMode || state.addZoneMode)) {
+    Object.values(PLACE_TOOLS).forEach((tool) => {
+      state[tool.stateKey] = false;
+      $(tool.btn).classList.remove("active");
+    });
     canvasWrapper.classList.remove("note-tool-active");
+  }
+});
+
+// Fullscreen canvas: hide the sidebar so the board gets the full window.
+// Esc also exits it, same as it does for the note/task tools.
+$("#fullscreen-btn").onclick = () => {
+  document.getElementById("app").classList.toggle("sidebar-hidden");
+};
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.getElementById("app").classList.contains("sidebar-hidden")) {
+    document.getElementById("app").classList.remove("sidebar-hidden");
   }
 });
 
@@ -363,7 +407,13 @@ function renderCanvas() {
     state.connectSource = null;
   }
   canvas.querySelectorAll(".node").forEach((n) => n.remove());
-  state.nodes.forEach((node) => canvas.appendChild(buildNodeEl(node)));
+  // Zones render first (so they sit behind, via normal DOM stacking order)
+  // and everything else on top of them, so nodes placed inside a zone stay
+  // clickable/draggable instead of the zone's rectangle stealing the click.
+  const zones = state.nodes.filter((n) => n.type === "zone");
+  const others = state.nodes.filter((n) => n.type !== "zone");
+  zones.forEach((node) => canvas.appendChild(buildNodeEl(node)));
+  others.forEach((node) => canvas.appendChild(buildNodeEl(node)));
   renderEdges();
   canvasWrapper.classList.toggle("empty", state.nodes.length === 0);
 }
@@ -379,6 +429,7 @@ function buildNodeEl(node) {
   const isNote = node.type === "note";
   const isImage = node.type === "image";
   const isTasks = node.type === "tasks";
+  const isZone = node.type === "zone";
 
   if (isImage) {
     return buildImageNodeEl(el, node);
@@ -386,13 +437,18 @@ function buildNodeEl(node) {
   if (isTasks) {
     return buildTasksNodeEl(el, node);
   }
+  if (isZone) {
+    return buildZoneNodeEl(el, node);
+  }
 
+  const isLink = node.type === "link";
   el.innerHTML = `
     <div class="node-icon-badge">${NODE_ICONS[node.type] || NODE_ICONS.other}</div>
     <div class="node-type">${escapeHtml(node.type)}</div>
     <div class="node-title">${escapeHtml(node.title)}</div>
     ${node.tags ? `<div class="node-tags">#${escapeHtml(node.tags).replace(/,\s*/g, " #")}</div>` : ""}
     ${isNote ? `<div class="node-quick-text" data-placeholder="Click to write...">${escapeHtml(node.content || "")}</div>` : ""}
+    ${isLink && node.content ? `<div class="node-link-url" title="Open in browser">${escapeHtml(node.content)}</div>` : ""}
     <div class="node-badges"></div>
   `;
   updateNodeBadges(el, node);
@@ -404,6 +460,17 @@ function buildNodeEl(node) {
       if (el._dragMoved) { el._dragMoved = false; return; }
       startQuickNoteEdit(quickText, node);
     });
+  }
+  if (isLink) {
+    const linkEl = el.querySelector(".node-link-url");
+    if (linkEl) {
+      linkEl.addEventListener("mousedown", (e) => e.stopPropagation());
+      linkEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (el._dragMoved) { el._dragMoved = false; return; }
+        openExternalUrl(node.content);
+      });
+    }
   }
   el.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -496,6 +563,67 @@ function buildTasksNodeEl(el, node) {
     if (state.connectMode) handleConnectClick(node.id, el);
     else openNodeModal(node);
   });
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, node);
+  });
+  return el;
+}
+
+const ZONE_MIN_W = 120;
+const ZONE_MIN_H = 90;
+
+// Zone nodes: a big dashed rectangle drawn behind other nodes to visually
+// group ones about the same topic - drag the body to move it, its corner
+// to resize, and click the label to rename/recolor it (reuses the normal
+// node modal, same as any other node type).
+function buildZoneNodeEl(el, node) {
+  el.classList.add("node-zone-card");
+  const w = node.width || 320;
+  const h = node.height || 220;
+  el.style.width = `${w}px`;
+  el.style.height = `${h}px`;
+  el.innerHTML = `
+    <div class="zone-label">${escapeHtml(node.title)}</div>
+    <div class="zone-resize-handle" title="Drag to resize"></div>
+  `;
+  makeDraggable(el, node);
+
+  el.querySelector(".zone-label").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el._dragMoved) { el._dragMoved = false; return; }
+    if (state.connectMode) handleConnectClick(node.id, el);
+    else openNodeModal(node);
+  });
+
+  const handle = el.querySelector(".zone-resize-handle");
+  handle.addEventListener("mousedown", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    const startW = parseFloat(el.style.width) || w;
+    const startH = parseFloat(el.style.height) || h;
+    const onMove = (ev) => {
+      const newW = Math.max(ZONE_MIN_W, startW + (ev.clientX - startX) / state.zoom);
+      const newH = Math.max(ZONE_MIN_H, startH + (ev.clientY - startY) / state.zoom);
+      el.style.width = `${newW}px`;
+      el.style.height = `${newH}px`;
+      renderEdges();
+    };
+    const onUp = async () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      const newW = parseFloat(el.style.width);
+      const newH = parseFloat(el.style.height);
+      node.width = newW;
+      node.height = newH;
+      await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify({ width: newW, height: newH }) });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -938,6 +1066,22 @@ const TYPE_DEFAULT_COLOR = {
   other: "#8b94a7",
 };
 
+// "Content" means something different depending on type - a URL for Link,
+// so the field is relabeled (and the textarea swapped for how it's used)
+// to match, instead of every type looking like the exact same form.
+function updateContentFieldForType() {
+  const type = $("#node-type").value;
+  if (type === "link") {
+    $("#node-content-label").textContent = "URL";
+    $("#node-content").placeholder = "https://example.com/...";
+    $("#node-content").rows = 2;
+  } else {
+    $("#node-content-label").textContent = "Content";
+    $("#node-content").placeholder = "";
+    $("#node-content").rows = 8;
+  }
+}
+
 function openNodeModal(node, defaults = {}) {
   state.editingNodeId = node ? node.id : null;
   $("#modal-title").textContent = node ? "Edit node" : "New node";
@@ -950,6 +1094,7 @@ function openNodeModal(node, defaults = {}) {
   $("#node-modal").dataset.x = node ? node.x : defaults.x;
   $("#node-modal").dataset.y = node ? node.y : defaults.y;
   $("#node-modal").dataset.origColor = node ? node.color : TYPE_DEFAULT_COLOR.note;
+  updateContentFieldForType();
   $("#node-modal").classList.remove("hidden", "minimized");
 }
 
@@ -957,6 +1102,7 @@ function openNodeModal(node, defaults = {}) {
 // switches the color swatch to that type's default, so you don't have to
 // manually re-pick a color every time just to get some visual variety.
 $("#node-type").addEventListener("change", () => {
+  updateContentFieldForType();
   if (state.editingNodeId) return;
   const def = TYPE_DEFAULT_COLOR[$("#node-type").value];
   if (def) $("#node-color").value = def;
@@ -980,6 +1126,22 @@ function revertLiveColor() {
   const orig = $("#node-modal").dataset.origColor;
   if (el && orig) el.style.setProperty("--node-color", orig);
 }
+
+// Quick color swatches so picking a node color doesn't always mean digging
+// into the native color picker - click one to use it directly.
+const COLOR_PRESETS = [
+  "#5b8cff", "#37d67a", "#ffd86b", "#ff9f4d", "#ff5f6d", "#c77dff",
+  "#5bc0ff", "#ff6bd6", "#8bd450", "#ffb347", "#8b94a7", "#e8eaf0",
+];
+$("#color-presets").innerHTML = COLOR_PRESETS.map(
+  (c) => `<button type="button" class="color-swatch" data-color="${c}" style="background:${c}"></button>`
+).join("");
+$("#color-presets").addEventListener("click", (e) => {
+  const btn = e.target.closest(".color-swatch");
+  if (!btn) return;
+  $("#node-color").value = btn.dataset.color;
+  $("#node-color").dispatchEvent(new Event("input", { bubbles: true }));
+});
 
 $("#node-color").addEventListener("input", (e) => {
   if (!state.editingNodeId) return;

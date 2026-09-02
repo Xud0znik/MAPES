@@ -73,6 +73,7 @@ async function loadBoard(boardId) {
   state.nodes = await api(`/api/boards/${boardId}/nodes`);
   state.edges = await api(`/api/boards/${boardId}/edges`);
   renderCanvas();
+  await refreshCurrentView();
 }
 
 $("#new-board-btn").onclick = async () => {
@@ -626,6 +627,413 @@ $("#file-save-btn").onclick = async () => {
   }
 };
 
+// ---------- view tabs (Board / Vault / Credentials / Findings / Reports) ----------
+
+state.currentView = "board";
+
+document.querySelectorAll(".view-tab").forEach((tab) => {
+  tab.addEventListener("click", () => switchView(tab.dataset.view));
+});
+
+async function switchView(view) {
+  state.currentView = view;
+  document.querySelectorAll(".view-tab").forEach((t) => t.classList.toggle("active", t.dataset.view === view));
+  document.querySelectorAll(".view-panel").forEach((p) => p.classList.add("hidden"));
+  $(`#${view}-view`).classList.remove("hidden");
+  await refreshCurrentView();
+}
+
+async function refreshCurrentView() {
+  if (!state.currentBoardId) return;
+  if (state.currentView === "vault") await loadVault();
+  else if (state.currentView === "creds") await loadCreds();
+  else if (state.currentView === "findings") await loadFindings();
+  else if (state.currentView === "reports") await loadDocs();
+}
+
+function populateNodeSelect(select, selectedId) {
+  select.innerHTML = '<option value="">— без узла —</option>';
+  state.nodes.forEach((n) => {
+    const opt = document.createElement("option");
+    opt.value = n.id;
+    opt.textContent = n.title;
+    if (selectedId && String(selectedId) === String(n.id)) opt.selected = true;
+    select.appendChild(opt);
+  });
+}
+
+function nodeTitle(nodeId) {
+  const n = state.nodes.find((x) => String(x.id) === String(nodeId));
+  return n ? n.title : "";
+}
+
+// ---------- Vault (file attachments) ----------
+
+let editingCaptureId = null;
+
+async function loadVault() {
+  const items = await api(`/api/boards/${state.currentBoardId}/captures`);
+  const grid = $("#vault-grid");
+  grid.innerHTML = "";
+  items.forEach((cap) => {
+    const card = document.createElement("div");
+    card.className = "vault-card";
+    const isImage = cap.mime && cap.mime.startsWith("image/");
+    card.innerHTML = `
+      <div class="vault-thumb">${isImage ? `<img src="/api/captures/${cap.id}/file" loading="lazy">` : "📄"}</div>
+      <div class="vault-card-info">
+        <div class="vault-card-name">${escapeHtml(cap.caption || cap.orig_name)}</div>
+        <div class="vault-card-meta">${nodeTitle(cap.node_id) || "без узла"}</div>
+      </div>
+    `;
+    card.onclick = () => openCaptureModal(cap);
+    grid.appendChild(card);
+  });
+}
+
+$("#vault-upload-btn").onclick = () => $("#vault-file-input").click();
+
+$("#vault-file-input").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file || !state.currentBoardId) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      await api(`/api/boards/${state.currentBoardId}/captures`, {
+        method: "POST",
+        body: JSON.stringify({
+          data: reader.result,
+          orig_name: file.name,
+          mime: file.type || "application/octet-stream",
+        }),
+      });
+      await loadVault();
+    } catch (err) {
+      alert(`Ошибка загрузки: ${err.message}`);
+    }
+  };
+  reader.readAsDataURL(file);
+});
+
+function openCaptureModal(cap) {
+  editingCaptureId = cap.id;
+  const isImage = cap.mime && cap.mime.startsWith("image/");
+  $("#capture-preview").innerHTML = isImage
+    ? `<img src="/api/captures/${cap.id}/file">`
+    : `<div class="file-icon">📄 ${escapeHtml(cap.orig_name)}</div>`;
+  $("#capture-caption").value = cap.caption || "";
+  $("#capture-tags").value = cap.tags || "";
+  populateNodeSelect($("#capture-node"), cap.node_id);
+  $("#capture-modal").classList.remove("hidden");
+}
+
+$("#capture-cancel").onclick = () => $("#capture-modal").classList.add("hidden");
+
+$("#capture-save").onclick = async () => {
+  await api(`/api/captures/${editingCaptureId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      caption: $("#capture-caption").value.trim(),
+      tags: $("#capture-tags").value.trim(),
+      node_id: $("#capture-node").value || null,
+    }),
+  });
+  $("#capture-modal").classList.add("hidden");
+  await loadVault();
+};
+
+$("#capture-delete").onclick = async () => {
+  if (!confirm("Удалить файл?")) return;
+  await api(`/api/captures/${editingCaptureId}`, { method: "DELETE" });
+  $("#capture-modal").classList.add("hidden");
+  await loadVault();
+};
+
+// ---------- Credentials ----------
+
+let editingCredId = null;
+
+async function loadCreds() {
+  const items = await api(`/api/boards/${state.currentBoardId}/creds`);
+  const tbody = $("#creds-tbody");
+  tbody.innerHTML = "";
+  items.forEach((cred) => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(cred.username || "-")}</td>
+      <td>${escapeHtml(cred.service || "-")}</td>
+      <td>${escapeHtml(cred.kind)}</td>
+      <td><span class="status-badge ${cred.status}">${escapeHtml(cred.status)}</span></td>
+      <td>${escapeHtml(nodeTitle(cred.node_id) || "-")}</td>
+      <td class="secret-cell">${cred.has_secret ? "••••••" : "-"}</td>
+    `;
+    tr.onclick = () => openCredModal(cred);
+    tbody.appendChild(tr);
+  });
+}
+
+$("#creds-add-btn").onclick = () => openCredModal(null);
+
+function openCredModal(cred) {
+  editingCredId = cred ? cred.id : null;
+  $("#cred-modal-title").textContent = cred ? "Редактировать учётку" : "Новая учётка";
+  $("#cred-username").value = cred ? cred.username : "";
+  $("#cred-secret").value = "";
+  $("#cred-secret").placeholder = cred ? "оставь пустым, чтобы не менять" : "";
+  $("#cred-kind").value = cred ? cred.kind : "password";
+  $("#cred-hash-type").value = cred ? cred.hash_type : "";
+  $("#cred-service").value = cred ? cred.service : "";
+  $("#cred-status").value = cred ? cred.status : "untested";
+  $("#cred-notes").value = cred ? cred.notes : "";
+  populateNodeSelect($("#cred-node"), cred ? cred.node_id : null);
+  $("#cred-delete").style.display = cred ? "inline-block" : "none";
+  $("#cred-modal").classList.remove("hidden");
+}
+
+$("#cred-cancel").onclick = () => $("#cred-modal").classList.add("hidden");
+
+$("#cred-save").onclick = async () => {
+  const payload = {
+    username: $("#cred-username").value.trim(),
+    kind: $("#cred-kind").value,
+    hash_type: $("#cred-hash-type").value.trim(),
+    service: $("#cred-service").value.trim(),
+    status: $("#cred-status").value,
+    notes: $("#cred-notes").value,
+    node_id: $("#cred-node").value || null,
+  };
+  const secret = $("#cred-secret").value;
+  if (secret) payload.secret = secret;
+  if (editingCredId) {
+    await api(`/api/creds/${editingCredId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  } else {
+    await api(`/api/boards/${state.currentBoardId}/creds`, { method: "POST", body: JSON.stringify(payload) });
+  }
+  $("#cred-modal").classList.add("hidden");
+  await loadCreds();
+};
+
+$("#cred-delete").onclick = async () => {
+  if (!editingCredId || !confirm("Удалить учётку?")) return;
+  await api(`/api/creds/${editingCredId}`, { method: "DELETE" });
+  $("#cred-modal").classList.add("hidden");
+  await loadCreds();
+};
+
+// ---------- Findings ----------
+
+let editingFindingId = null;
+const SEVERITY_LABEL = { crit: "Критичная", high: "Высокая", med: "Средняя", low: "Низкая", info: "Инфо" };
+
+async function loadFindings() {
+  const items = await api(`/api/boards/${state.currentBoardId}/findings`);
+  const list = $("#findings-list");
+  list.innerHTML = "";
+  items.forEach((f) => {
+    const card = document.createElement("div");
+    card.className = `finding-card ${f.severity}`;
+    card.innerHTML = `
+      <span class="severity-badge ${f.severity}">${SEVERITY_LABEL[f.severity] || f.severity}</span>
+      <span class="finding-title">${escapeHtml(f.title)}</span>
+      <span class="finding-node">${escapeHtml(nodeTitle(f.node_id))}</span>
+      <span class="status-badge ${f.status}">${escapeHtml(f.status)}</span>
+    `;
+    card.onclick = () => openFindingModal(f);
+    list.appendChild(card);
+  });
+}
+
+$("#findings-add-btn").onclick = () => openFindingModal(null);
+
+function openFindingModal(f) {
+  editingFindingId = f ? f.id : null;
+  $("#finding-modal-title").textContent = f ? "Редактировать finding" : "Новый finding";
+  $("#finding-title").value = f ? f.title : "";
+  $("#finding-severity").value = f ? f.severity : "info";
+  $("#finding-status").value = f ? f.status : "open";
+  $("#finding-description").value = f ? f.description : "";
+  $("#finding-impact").value = f ? f.impact : "";
+  $("#finding-poc").value = f ? f.poc : "";
+  $("#finding-remediation").value = f ? f.remediation : "";
+  $("#finding-refs").value = f ? f.refs : "";
+  populateNodeSelect($("#finding-node"), f ? f.node_id : null);
+  $("#finding-delete").style.display = f ? "inline-block" : "none";
+  $("#finding-modal").classList.remove("hidden");
+}
+
+$("#finding-cancel").onclick = () => $("#finding-modal").classList.add("hidden");
+
+$("#finding-save").onclick = async () => {
+  const payload = {
+    title: $("#finding-title").value.trim() || "Без названия",
+    severity: $("#finding-severity").value,
+    status: $("#finding-status").value,
+    description: $("#finding-description").value,
+    impact: $("#finding-impact").value,
+    poc: $("#finding-poc").value,
+    remediation: $("#finding-remediation").value,
+    refs: $("#finding-refs").value,
+    node_id: $("#finding-node").value || null,
+  };
+  if (editingFindingId) {
+    await api(`/api/findings/${editingFindingId}`, { method: "PATCH", body: JSON.stringify(payload) });
+  } else {
+    await api(`/api/boards/${state.currentBoardId}/findings`, { method: "POST", body: JSON.stringify(payload) });
+  }
+  $("#finding-modal").classList.add("hidden");
+  await loadFindings();
+};
+
+$("#finding-delete").onclick = async () => {
+  if (!editingFindingId || !confirm("Удалить finding?")) return;
+  await api(`/api/findings/${editingFindingId}`, { method: "DELETE" });
+  $("#finding-modal").classList.add("hidden");
+  await loadFindings();
+};
+
+// ---------- Reports (markdown docs) ----------
+
+let currentDocId = null;
+
+async function loadDocs() {
+  const items = await api(`/api/boards/${state.currentBoardId}/docs`);
+  const list = $("#doc-list");
+  list.innerHTML = "";
+  items.forEach((d) => {
+    const div = document.createElement("div");
+    div.className = "doc-item" + (d.id === currentDocId ? " active" : "");
+    div.innerHTML = `${escapeHtml(d.title)}<div class="doc-item-meta">${d.size} симв.</div>`;
+    div.onclick = () => openDoc(d.id);
+    list.appendChild(div);
+  });
+  if (!items.some((d) => d.id === currentDocId)) {
+    currentDocId = null;
+    setDocEditorEnabled(false);
+  }
+}
+
+function setDocEditorEnabled(enabled) {
+  $("#doc-title-input").disabled = !enabled;
+  $("#doc-body-input").disabled = !enabled;
+  $("#doc-save-btn").disabled = !enabled;
+  $("#doc-export-btn").disabled = !enabled;
+  $("#doc-delete-btn").disabled = !enabled;
+  if (!enabled) {
+    $("#doc-title-input").value = "";
+    $("#doc-body-input").value = "";
+    $("#doc-preview").innerHTML = "";
+  }
+}
+
+async function openDoc(id) {
+  currentDocId = id;
+  const doc = await api(`/api/docs/${id}`);
+  $("#doc-title-input").value = doc.title;
+  $("#doc-body-input").value = doc.body;
+  setDocEditorEnabled(true);
+  renderDocPreview();
+  await loadDocs();
+}
+
+$("#doc-add-btn").onclick = async () => {
+  const doc = await api(`/api/boards/${state.currentBoardId}/docs`, {
+    method: "POST",
+    body: JSON.stringify({ title: "Новый отчёт", body: "" }),
+  });
+  await openDoc(doc.id);
+};
+
+$("#doc-body-input").addEventListener("input", renderDocPreview);
+
+function renderDocPreview() {
+  $("#doc-preview").innerHTML = renderMarkdown($("#doc-body-input").value);
+}
+
+$("#doc-save-btn").onclick = async () => {
+  await api(`/api/docs/${currentDocId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      title: $("#doc-title-input").value.trim() || "Отчёт",
+      body: $("#doc-body-input").value,
+    }),
+  });
+  await loadDocs();
+};
+
+$("#doc-export-btn").onclick = () => {
+  if (!currentDocId) return;
+  const a = document.createElement("a");
+  a.href = `/api/docs/${currentDocId}/export.md`;
+  a.click();
+};
+
+$("#doc-delete-btn").onclick = async () => {
+  if (!currentDocId || !confirm("Удалить отчёт?")) return;
+  await api(`/api/docs/${currentDocId}`, { method: "DELETE" });
+  currentDocId = null;
+  setDocEditorEnabled(false);
+  await loadDocs();
+};
+
+function renderMarkdown(src) {
+  const codeBlocks = [];
+  let text = String(src ?? "").replace(/```([\s\S]*?)```/g, (_, code) => {
+    codeBlocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+    return `${codeBlocks.length - 1}`;
+  });
+
+  const lines = text.split("\n");
+  const html = [];
+  let inList = false;
+  let inQuote = false;
+
+  const closeList = () => { if (inList) { html.push("</ul>"); inList = false; } };
+  const closeQuote = () => { if (inQuote) { html.push("</blockquote>"); inQuote = false; } };
+
+  for (const line of lines) {
+    const codeMatch = line.trim().match(/^(\d+)$/);
+    if (codeMatch && codeBlocks[Number(codeMatch[1])] !== undefined) {
+      closeList(); closeQuote();
+      html.push(codeBlocks[Number(codeMatch[1])]);
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    const listItem = line.match(/^[-*]\s+(.*)$/);
+    const quoteItem = line.match(/^>\s?(.*)$/);
+
+    if (heading) {
+      closeList(); closeQuote();
+      const level = heading[1].length;
+      html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+    } else if (listItem) {
+      closeQuote();
+      if (!inList) { html.push("<ul>"); inList = true; }
+      html.push(`<li>${inline(listItem[1])}</li>`);
+    } else if (quoteItem) {
+      closeList();
+      if (!inQuote) { html.push("<blockquote>"); inQuote = true; }
+      html.push(inline(quoteItem[1]) + "<br>");
+    } else if (line.trim() === "") {
+      closeList(); closeQuote();
+    } else {
+      closeList(); closeQuote();
+      html.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  closeList(); closeQuote();
+
+  return html.join("\n");
+}
+
+function inline(text) {
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+
 loadBoards();
 refreshFileStatus();
-loadDataLocation();

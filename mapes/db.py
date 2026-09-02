@@ -51,8 +51,64 @@ CREATE TABLE IF NOT EXISTS edges (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS captures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+    filename TEXT NOT NULL,
+    orig_name TEXT DEFAULT '',
+    mime TEXT DEFAULT 'image/png',
+    size INTEGER DEFAULT 0,
+    caption TEXT DEFAULT '',
+    tags TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS creds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+    username TEXT DEFAULT '',
+    secret TEXT DEFAULT '',
+    kind TEXT DEFAULT 'password',
+    hash_type TEXT DEFAULT '',
+    service TEXT DEFAULT '',
+    status TEXT DEFAULT 'untested',
+    notes TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS findings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    impact TEXT DEFAULT '',
+    poc TEXT DEFAULT '',
+    remediation TEXT DEFAULT '',
+    refs TEXT DEFAULT '',
+    severity TEXT DEFAULT 'info',
+    status TEXT DEFAULT 'open',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS docs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    title TEXT DEFAULT 'Отчёт',
+    body TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_nodes_board ON nodes(board_id);
 CREATE INDEX IF NOT EXISTS idx_edges_board ON edges(board_id);
+CREATE INDEX IF NOT EXISTS idx_captures_board ON captures(board_id);
+CREATE INDEX IF NOT EXISTS idx_creds_board ON creds(board_id);
+CREATE INDEX IF NOT EXISTS idx_findings_board ON findings(board_id);
+CREATE INDEX IF NOT EXISTS idx_docs_board ON docs(board_id);
 """
 
 
@@ -62,6 +118,14 @@ def get_connection():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def captures_dir_for(board_id):
+    """Where uploaded vault files for a board live on disk, next to the
+    live database (NOT copied by "Сохранить как" - only the .db is)."""
+    d = DATA_DIR / "captures" / str(board_id)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def backup_to(dest_path):

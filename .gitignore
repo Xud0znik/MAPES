@@ -5,4 +5,5 @@ venv/
 data/
 *.db
 mapes_config.json
+secret.key
 .DS_Store

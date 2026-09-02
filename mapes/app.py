@@ -1,11 +1,20 @@
+import base64
+import binascii
+import mimetypes
+import re
 from pathlib import Path
 
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, Response, jsonify, request, render_template
 
-from . import db
+from . import crypto, db
 from .config import load_config, save_config
 from .db import get_connection, init_db
 from .paths import resource_root
+
+
+def _slug(text, limit=60):
+    text = re.sub(r"[^\w\-]+", "_", (text or "").strip()).strip("_")
+    return (text or "file")[:limit]
 
 
 def create_app():
@@ -179,6 +188,320 @@ def create_app():
         conn.commit()
         conn.close()
         return "", 204
+
+    # ---------- vault (attachments/captures) ----------
+
+    @app.get("/api/boards/<int:board_id>/captures")
+    def list_captures(board_id):
+        node_id = request.args.get("node_id")
+        conn = get_connection()
+        sql = ("SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
+               "FROM captures WHERE board_id = ?")
+        params = [board_id]
+        if node_id:
+            sql += " AND node_id = ?"
+            params.append(node_id)
+        sql += " ORDER BY id DESC"
+        rows = conn.execute(sql, params).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+
+    @app.post("/api/boards/<int:board_id>/captures")
+    def create_capture(board_id):
+        data = request.get_json(force=True) or {}
+        raw = data.get("data") or ""
+        if raw.startswith("data:"):
+            raw = raw.split(",", 1)[-1]
+        try:
+            blob = base64.b64decode(raw, validate=False)
+        except (binascii.Error, ValueError):
+            return jsonify({"error": "Некорректные данные файла"}), 400
+        if not blob:
+            return jsonify({"error": "Пустой файл"}), 400
+
+        orig_name = (data.get("orig_name") or "file").strip()
+        mime = data.get("mime") or mimetypes.guess_type(orig_name)[0] or "application/octet-stream"
+        node_id = data.get("node_id") or None
+
+        conn = get_connection()
+        cur = conn.execute(
+            """INSERT INTO captures (board_id, node_id, filename, orig_name, mime, size, caption, tags)
+               VALUES (?, ?, '', ?, ?, ?, ?, ?)""",
+            (board_id, node_id, orig_name, mime, len(blob), data.get("caption", ""), data.get("tags", "")),
+        )
+        cap_id = cur.lastrowid
+        ext = Path(orig_name).suffix or (mimetypes.guess_extension(mime) or "")
+        filename = f"cap-{cap_id}-{_slug(Path(orig_name).stem)}{ext}"
+        (db.captures_dir_for(board_id) / filename).write_bytes(blob)
+        conn.execute("UPDATE captures SET filename = ? WHERE id = ?", (filename, cap_id))
+        conn.commit()
+        cap = conn.execute(
+            "SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
+            "FROM captures WHERE id = ?", (cap_id,),
+        ).fetchone()
+        conn.close()
+        return jsonify(dict(cap)), 201
+
+    @app.get("/api/captures/<int:capture_id>/file")
+    def get_capture_file(capture_id):
+        conn = get_connection()
+        cap = conn.execute("SELECT * FROM captures WHERE id = ?", (capture_id,)).fetchone()
+        conn.close()
+        if not cap:
+            return jsonify({"error": "not found"}), 404
+        path = db.captures_dir_for(cap["board_id"]) / cap["filename"]
+        if not path.is_file():
+            return jsonify({"error": "Файл отсутствует на диске"}), 404
+        return Response(path.read_bytes(), mimetype=cap["mime"] or "application/octet-stream")
+
+    @app.patch("/api/captures/<int:capture_id>")
+    def update_capture(capture_id):
+        data = request.get_json(force=True) or {}
+        conn = get_connection()
+        fields = {k: data[k] for k in ("caption", "tags", "node_id") if k in data}
+        if fields:
+            set_clause = ", ".join(f"{k} = ?" for k in fields)
+            conn.execute(f"UPDATE captures SET {set_clause} WHERE id = ?", (*fields.values(), capture_id))
+            conn.commit()
+        cap = conn.execute(
+            "SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
+            "FROM captures WHERE id = ?", (capture_id,),
+        ).fetchone()
+        conn.close()
+        if not cap:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(dict(cap))
+
+    @app.delete("/api/captures/<int:capture_id>")
+    def delete_capture(capture_id):
+        conn = get_connection()
+        cap = conn.execute("SELECT * FROM captures WHERE id = ?", (capture_id,)).fetchone()
+        if cap:
+            path = db.captures_dir_for(cap["board_id"]) / cap["filename"]
+            path.unlink(missing_ok=True)
+            conn.execute("DELETE FROM captures WHERE id = ?", (capture_id,))
+            conn.commit()
+        conn.close()
+        return "", 204
+
+    # ---------- credentials ----------
+
+    def _cred_out(row):
+        d = dict(row)
+        d["has_secret"] = bool(d.pop("secret", ""))
+        return d
+
+    @app.get("/api/boards/<int:board_id>/creds")
+    def list_creds(board_id):
+        conn = get_connection()
+        rows = conn.execute("SELECT * FROM creds WHERE board_id = ? ORDER BY id DESC", (board_id,)).fetchall()
+        conn.close()
+        return jsonify([_cred_out(r) for r in rows])
+
+    @app.post("/api/boards/<int:board_id>/creds")
+    def create_cred(board_id):
+        data = request.get_json(force=True) or {}
+        conn = get_connection()
+        cur = conn.execute(
+            """INSERT INTO creds (board_id, node_id, username, secret, kind, hash_type, service, status, notes)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                board_id,
+                data.get("node_id") or None,
+                data.get("username", ""),
+                crypto.encrypt(data.get("secret", "")),
+                data.get("kind", "password"),
+                data.get("hash_type", ""),
+                data.get("service", ""),
+                data.get("status", "untested"),
+                data.get("notes", ""),
+            ),
+        )
+        conn.commit()
+        cred = conn.execute("SELECT * FROM creds WHERE id = ?", (cur.lastrowid,)).fetchone()
+        conn.close()
+        return jsonify(_cred_out(cred)), 201
+
+    @app.patch("/api/creds/<int:cred_id>")
+    def update_cred(cred_id):
+        data = request.get_json(force=True) or {}
+        conn = get_connection()
+        fields = {}
+        for key in ("username", "kind", "hash_type", "service", "status", "notes", "node_id"):
+            if key in data:
+                fields[key] = data[key]
+        if "secret" in data:
+            fields["secret"] = crypto.encrypt(data["secret"])
+        if fields:
+            set_clause = ", ".join(f"{k} = ?" for k in fields)
+            conn.execute(f"UPDATE creds SET {set_clause} WHERE id = ?", (*fields.values(), cred_id))
+            conn.commit()
+        cred = conn.execute("SELECT * FROM creds WHERE id = ?", (cred_id,)).fetchone()
+        conn.close()
+        if not cred:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(_cred_out(cred))
+
+    @app.get("/api/creds/<int:cred_id>/reveal")
+    def reveal_cred(cred_id):
+        conn = get_connection()
+        cred = conn.execute("SELECT secret FROM creds WHERE id = ?", (cred_id,)).fetchone()
+        conn.close()
+        if not cred:
+            return jsonify({"error": "not found"}), 404
+        return jsonify({"secret": crypto.decrypt(cred["secret"])})
+
+    @app.delete("/api/creds/<int:cred_id>")
+    def delete_cred(cred_id):
+        conn = get_connection()
+        conn.execute("DELETE FROM creds WHERE id = ?", (cred_id,))
+        conn.commit()
+        conn.close()
+        return "", 204
+
+    # ---------- findings ----------
+
+    _SEVERITY_ORDER = "CASE severity WHEN 'crit' THEN 0 WHEN 'high' THEN 1 WHEN 'med' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
+
+    @app.get("/api/boards/<int:board_id>/findings")
+    def list_findings(board_id):
+        conn = get_connection()
+        rows = conn.execute(
+            f"SELECT * FROM findings WHERE board_id = ? ORDER BY {_SEVERITY_ORDER}, id DESC", (board_id,),
+        ).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+
+    @app.post("/api/boards/<int:board_id>/findings")
+    def create_finding(board_id):
+        data = request.get_json(force=True) or {}
+        title = (data.get("title") or "Без названия").strip()
+        conn = get_connection()
+        cur = conn.execute(
+            """INSERT INTO findings (board_id, node_id, title, description, impact, poc,
+               remediation, refs, severity, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                board_id,
+                data.get("node_id") or None,
+                title,
+                data.get("description", ""),
+                data.get("impact", ""),
+                data.get("poc", ""),
+                data.get("remediation", ""),
+                data.get("refs", ""),
+                data.get("severity", "info"),
+                data.get("status", "open"),
+            ),
+        )
+        conn.commit()
+        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (cur.lastrowid,)).fetchone()
+        conn.close()
+        return jsonify(dict(finding)), 201
+
+    @app.patch("/api/findings/<int:finding_id>")
+    def update_finding(finding_id):
+        data = request.get_json(force=True) or {}
+        conn = get_connection()
+        fields = {}
+        for key in ("node_id", "title", "description", "impact", "poc", "remediation",
+                    "refs", "severity", "status"):
+            if key in data:
+                fields[key] = data[key]
+        if fields:
+            set_clause = ", ".join(f"{k} = ?" for k in fields)
+            conn.execute(
+                f"UPDATE findings SET {set_clause}, updated_at = datetime('now') WHERE id = ?",
+                (*fields.values(), finding_id),
+            )
+            conn.commit()
+        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
+        conn.close()
+        if not finding:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(dict(finding))
+
+    @app.delete("/api/findings/<int:finding_id>")
+    def delete_finding(finding_id):
+        conn = get_connection()
+        conn.execute("DELETE FROM findings WHERE id = ?", (finding_id,))
+        conn.commit()
+        conn.close()
+        return "", 204
+
+    # ---------- reports (docs) ----------
+
+    @app.get("/api/boards/<int:board_id>/docs")
+    def list_docs(board_id):
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT id, board_id, title, LENGTH(body) AS size, created_at, updated_at "
+            "FROM docs WHERE board_id = ? ORDER BY updated_at DESC", (board_id,),
+        ).fetchall()
+        conn.close()
+        return jsonify([dict(r) for r in rows])
+
+    @app.post("/api/boards/<int:board_id>/docs")
+    def create_doc(board_id):
+        data = request.get_json(force=True) or {}
+        conn = get_connection()
+        cur = conn.execute(
+            "INSERT INTO docs (board_id, title, body) VALUES (?, ?, ?)",
+            (board_id, (data.get("title") or "Отчёт").strip(), data.get("body", "")),
+        )
+        conn.commit()
+        doc = conn.execute("SELECT * FROM docs WHERE id = ?", (cur.lastrowid,)).fetchone()
+        conn.close()
+        return jsonify(dict(doc)), 201
+
+    @app.get("/api/docs/<int:doc_id>")
+    def get_doc(doc_id):
+        conn = get_connection()
+        doc = conn.execute("SELECT * FROM docs WHERE id = ?", (doc_id,)).fetchone()
+        conn.close()
+        if not doc:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(dict(doc))
+
+    @app.patch("/api/docs/<int:doc_id>")
+    def update_doc(doc_id):
+        data = request.get_json(force=True) or {}
+        conn = get_connection()
+        fields = {k: data[k] for k in ("title", "body") if k in data}
+        if fields:
+            set_clause = ", ".join(f"{k} = ?" for k in fields)
+            conn.execute(
+                f"UPDATE docs SET {set_clause}, updated_at = datetime('now') WHERE id = ?",
+                (*fields.values(), doc_id),
+            )
+            conn.commit()
+        doc = conn.execute("SELECT * FROM docs WHERE id = ?", (doc_id,)).fetchone()
+        conn.close()
+        if not doc:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(dict(doc))
+
+    @app.delete("/api/docs/<int:doc_id>")
+    def delete_doc(doc_id):
+        conn = get_connection()
+        conn.execute("DELETE FROM docs WHERE id = ?", (doc_id,))
+        conn.commit()
+        conn.close()
+        return "", 204
+
+    @app.get("/api/docs/<int:doc_id>/export.md")
+    def export_doc_md(doc_id):
+        conn = get_connection()
+        doc = conn.execute("SELECT * FROM docs WHERE id = ?", (doc_id,)).fetchone()
+        conn.close()
+        if not doc:
+            return jsonify({"error": "not found"}), 404
+        body = (doc["body"] or "").encode("utf-8")
+        return Response(
+            body,
+            mimetype="text/markdown",
+            headers={"Content-Disposition": f'attachment; filename="{_slug(doc["title"])}.md"'},
+        )
 
     # ---------- file: current location, open, save as, save ----------
 

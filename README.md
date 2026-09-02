@@ -26,6 +26,15 @@ repository and download the build for your OS:
 
 Data is saved in a `data` folder next to the binary.
 
+> **Windows might block the .exe on first run.** MAPES.exe isn't signed with a paid
+> code-signing certificate, so Windows' Smart App Control (or plain SmartScreen) may
+> refuse to run it with a "publisher could not be verified" warning - this happens to
+> any unsigned .exe, not just MAPES. If Smart App Control is still in "Evaluation"
+> mode, turn it off under Windows Security → App & browser control → Smart App
+> Control, then run the .exe again. If it's already "On", it can't be turned off
+> without reinstalling Windows - use Option 2 (run from source) instead, which isn't
+> a binary and so isn't affected.
+
 ### Option 2 - from source (Windows/macOS/Linux)
 
 Requires Python 3.9+.

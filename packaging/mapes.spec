@@ -1,8 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 # Build with:  pyinstaller packaging/mapes.spec
-# Produces a single-file MAPES.exe in dist/
+# Produces a single-file MAPES(.exe) in dist/ - works for Windows, Linux, macOS,
+# whatever platform you run PyInstaller on.
+
+import sys
 
 block_cipher = None
+
+# Only pull in the platform's own pywebview backend as a hidden import - on
+# Linux this needs GTK/WebKit system libraries that the build machine may
+# not have, so we deliberately do NOT hard-require webview.platforms.gtk
+# there. If GTK/WebKit are missing at runtime, mapes.py already falls back
+# to opening a regular browser tab instead of crashing.
+platform_hidden = []
+if sys.platform.startswith("win"):
+    platform_hidden = ["webview.platforms.winforms", "webview.platforms.edgechromium"]
+elif sys.platform == "darwin":
+    platform_hidden = ["webview.platforms.cocoa"]
 
 a = Analysis(
     ['../mapes.py'],
@@ -13,8 +27,7 @@ a = Analysis(
         ('../mapes/static', 'mapes/static'),
     ],
     hiddenimports=[
-        'webview.platforms.winforms',
-        'webview.platforms.edgechromium',
+        *platform_hidden,
         'tkinter',
         'tkinter.filedialog',
         'tkinter.messagebox',
@@ -46,5 +59,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='icon.ico',
+    icon='icon.ico' if sys.platform.startswith("win") else None,
 )

@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Build Releases
 
 on:
   release:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  build:
+  build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,3 +34,40 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/MAPES.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies (tkinter, for the native folder/file dialogs)
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build MAPES binary
+        run: pyinstaller packaging/mapes.spec
+
+      - name: Rename and mark executable
+        run: |
+          mv dist/MAPES dist/MAPES-linux
+          chmod +x dist/MAPES-linux
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MAPES-linux
+          path: dist/MAPES-linux
+
+      - name: Attach to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MAPES-linux

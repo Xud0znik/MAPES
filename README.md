@@ -11,11 +11,20 @@ tied to pentesting: it's a general-purpose visual board for anything.
 
 ## Getting started
 
-### Option 1 - prebuilt .exe (Windows, nothing to install)
+### Option 1 - prebuilt binary, nothing to install (no admin/root needed)
 
-Go to [Releases](../../releases) in this repository, download `MAPES.exe`, and run it.
-It opens its own app window (no browser, no address bar). Data is saved in a `data`
-folder next to `MAPES.exe`.
+Go to [Releases](../../releases) (or the latest [Actions run](../../actions)) in this
+repository and download the build for your OS:
+
+- **Windows**: `MAPES.exe` - just double-click it. Opens its own app window (no
+  browser, no address bar).
+- **Linux**: `MAPES-linux` - download it, `chmod +x MAPES-linux`, then run
+  `./MAPES-linux`. No root/sudo needed - it's a single self-contained binary. If your
+  desktop has GTK/WebKit (most GNOME/desktop Ubuntu installs do), it opens its own
+  window; otherwise it automatically opens in your default browser instead - either
+  way it just works, nothing to install.
+
+Data is saved in a `data` folder next to the binary.
 
 ### Option 2 - from source (Windows/macOS/Linux)
 
@@ -33,16 +42,18 @@ The app starts a local server on `http://127.0.0.1:5057` and opens its own windo
 system libraries - GTK/Qt), the app automatically falls back to a regular browser
 tab. Nothing is ever sent over the internet - the server only listens on `127.0.0.1`.
 
-### Building the .exe yourself
+### Building the binary yourself
 
 ```bash
 pip install -r requirements.txt pyinstaller
 pyinstaller packaging/mapes.spec
 ```
 
-The built file appears at `dist/MAPES.exe`. There's also a GitHub Actions workflow
-(`.github/workflows/build-exe.yml`) that builds `MAPES.exe` on `windows-latest` and
-attaches it to a GitHub Release when one is published (or can be run manually).
+The built file appears at `dist/MAPES` (`dist/MAPES.exe` on Windows) for whatever OS
+you ran PyInstaller on - it doesn't cross-compile. There's also a GitHub Actions
+workflow (`.github/workflows/build-exe.yml`) that builds both the Windows and Linux
+binaries on every manual run, and attaches them to a GitHub Release when one is
+published.
 
 ## Where data is stored
 
@@ -73,6 +84,16 @@ MAPES_DATA_DIR="/path/to/folder-or-file.db" python mapes.py
 
 The `data` folder isn't committed to git (see `.gitignore`). For a backup, just copy
 the `mapes.db` file, or use "Save As" right in the app.
+
+### Using MAPES on more than one device
+
+MAPES has no server/account/login by design, so there's no built-in cloud sync - but
+you don't need one to move between devices. Point `MAPES_DATA_DIR` (or "Open" in the
+UI) at a folder inside Dropbox/Google Drive/OneDrive, and that cloud client keeps the
+`mapes.db` file (plus the `captures/` folder) in sync for you automatically. Works
+just as well by copying the `data` folder onto a USB drive if you'd rather not use a
+cloud folder. Either way: only have the app open on **one device at a time** - SQLite
+files don't handle two processes writing to them concurrently over a network share.
 
 ## Features
 

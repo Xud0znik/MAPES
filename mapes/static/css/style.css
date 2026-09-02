@@ -507,29 +507,27 @@ button:disabled { opacity: .4; cursor: default; }
 .node-tasks-card .node-icon-badge { position: static; width: 22px; height: 22px; font-size: 12px; box-shadow: none; margin-right: 6px; flex-shrink: 0; }
 .node-tasks-card .node-type { display: none; }
 .node-tasks-card .node-title { margin: 0; }
-/* Deliberately not flexbox here - a flex row with a shrinkable text child
-   plus overflow-wrap:anywhere was collapsing to a one-character-wide
-   column in this app's embedded browser. Absolute-positioning the
-   checkbox over a plain block of text sidesteps flex sizing entirely. */
+/* Deliberately CSS Grid, not flexbox, here - a flex row with a shrinkable
+   text child plus overflow-wrap:anywhere was collapsing to a
+   one-character-wide column in this app's embedded browser, and absolute
+   positioning ended up misplaced too. Grid's track sizes are fixed and
+   non-negotiable, so there's no sizing ambiguity left to miscompute. */
 .node-tasklist-items { margin-top: 8px; }
 .tasklist-item {
-  position: relative;
-  min-height: 18px;
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: start;
+  gap: 6px;
   margin-bottom: 6px;
-  padding-left: 22px;
   font-size: 12.5px;
   cursor: pointer;
 }
 .tasklist-item input[type="checkbox"] {
-  position: absolute;
-  left: 0;
-  top: 2px;
+  margin: 2px 0 0;
   accent-color: var(--accent);
   cursor: pointer;
 }
 .tasklist-item .task-text {
-  display: block;
-  width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -950,25 +948,22 @@ tr.empty-row td {
 .doc-preview blockquote { border-left: 3px solid var(--border); margin: 0; padding-left: 12px; color: var(--muted); }
 .doc-preview a { color: var(--accent); overflow-wrap: anywhere; }
 .doc-preview ul { padding-left: 1.3em; margin: .4em 0; }
-/* Same non-flex layout as the board's Tasks node - see the comment there. */
+/* Same grid layout as the board's Tasks node - see the comment there. */
 .doc-preview li.task-item {
-  position: relative;
   list-style: none;
   margin-left: -1.3em;
-  min-height: 20px;
-  padding-left: 24px;
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: start;
+  gap: 7px;
   margin-bottom: 4px;
 }
 .doc-preview li.task-item input[type="checkbox"] {
-  position: absolute;
-  left: 0;
-  top: 3px;
+  margin: 3px 0 0;
   accent-color: var(--accent);
   cursor: pointer;
 }
 .doc-preview li.task-item .task-text {
-  display: block;
-  width: 100%;
   cursor: pointer;
 }
 .reports-actions { display: flex; gap: 8px; }

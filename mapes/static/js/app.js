@@ -1730,6 +1730,9 @@ $("#doc-title-input").addEventListener("blur", async () => {
 // source line and re-renders, without leaving preview mode. Clicking
 // anywhere else in the preview switches to edit mode.
 $("#doc-preview").addEventListener("click", (e) => {
+  // Clicking the checkbox itself already toggles it natively (handled by
+  // the "change" listener below) - don't also fall through to edit mode.
+  if (e.target.matches('input[type="checkbox"]')) return;
   const text = e.target.closest(".task-text");
   if (text) {
     const cb = text.previousElementSibling;

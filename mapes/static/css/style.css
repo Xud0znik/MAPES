@@ -18,6 +18,11 @@
   --sev-info: #8b94a7;
 }
 
+/* Utility: always wins over any other display rule (including ID selectors
+   like #board-view's own `display: flex`), so toggling this class is a
+   reliable way to hide any element regardless of its own styling. */
+.hidden { display: none !important; }
+
 * { box-sizing: border-box; }
 
 /* Dark scrollbars everywhere (Chromium/Edge, which is what pywebview uses on

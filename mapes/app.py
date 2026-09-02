@@ -607,4 +607,34 @@ def create_app():
         ).fetchall()
         return jsonify([dict(r) for r in rows])
 
+    @app.get("/api/search")
+    def search_everywhere():
+        """Search across every board at once - nodes and reports - so
+        something written weeks ago on a different board is still easy to
+        find again, instead of only searching whichever board happens to be
+        open right now."""
+        term = (request.args.get("q") or "").strip()
+        if not term:
+            return jsonify({"nodes": [], "docs": []})
+        q = f"%{term}%"
+        conn = get_connection()
+        node_rows = conn.execute(
+            """SELECT nodes.*, boards.name AS board_name FROM nodes
+               JOIN boards ON boards.id = nodes.board_id
+               WHERE nodes.title LIKE ? OR nodes.content LIKE ? OR nodes.tags LIKE ?
+               ORDER BY nodes.updated_at DESC LIMIT 50""",
+            (q, q, q),
+        ).fetchall()
+        doc_rows = conn.execute(
+            """SELECT docs.id, docs.board_id, docs.title, boards.name AS board_name FROM docs
+               JOIN boards ON boards.id = docs.board_id
+               WHERE docs.title LIKE ? OR docs.body LIKE ?
+               ORDER BY docs.updated_at DESC LIMIT 50""",
+            (q, q),
+        ).fetchall()
+        return jsonify({
+            "nodes": [dict(r) for r in node_rows],
+            "docs": [dict(r) for r in doc_rows],
+        })
+
     return app

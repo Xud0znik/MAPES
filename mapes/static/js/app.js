@@ -950,30 +950,55 @@ $("#node-delete").onclick = async () => {
 
 // ---------- search ----------
 
+// Searches every board at once, not just whichever one is open - so
+// something written weeks ago for a different subject/project is still
+// easy to dig back up later.
+async function goToBoard(boardId) {
+  if (state.currentBoardId !== boardId) {
+    state.currentBoardId = boardId;
+    renderBoardList();
+    await loadBoard(boardId);
+  }
+}
+
 let searchTimer = null;
 $("#search-input").addEventListener("input", (e) => {
   clearTimeout(searchTimer);
   const q = e.target.value.trim();
   searchTimer = setTimeout(async () => {
-    if (!q || !state.currentBoardId) {
-      $("#search-results").innerHTML = "";
+    const el = $("#search-results");
+    if (!q) {
+      el.innerHTML = "";
       return;
     }
-    const hits = await api(
-      `/api/boards/${state.currentBoardId}/search?q=${encodeURIComponent(q)}`
-    );
-    const el = $("#search-results");
+    const { nodes, docs } = await api(`/api/search?q=${encodeURIComponent(q)}`);
     el.innerHTML = "";
-    hits.forEach((node) => {
+    if (!nodes.length && !docs.length) {
+      el.innerHTML = `<div class="search-empty">No matches.</div>`;
+      return;
+    }
+    nodes.forEach((node) => {
       const div = document.createElement("div");
       div.className = "search-hit";
-      div.textContent = node.title;
-      div.onclick = () => {
+      div.innerHTML = `${NODE_ICONS[node.type] || NODE_ICONS.other} ${escapeHtml(node.title)}
+        <span class="search-hit-board">${escapeHtml(node.board_name)}</span>`;
+      div.onclick = async () => {
+        await goToBoard(node.board_id);
         const target = canvas.querySelector(`.node[data-id="${node.id}"]`);
-        if (target) {
-          target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-          openNodeModal(node);
-        }
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        openNodeModal(node);
+      };
+      el.appendChild(div);
+    });
+    docs.forEach((doc) => {
+      const div = document.createElement("div");
+      div.className = "search-hit";
+      div.innerHTML = `▤ ${escapeHtml(doc.title)}
+        <span class="search-hit-board">${escapeHtml(doc.board_name)}</span>`;
+      div.onclick = async () => {
+        await goToBoard(doc.board_id);
+        switchView("reports");
+        openDoc(doc.id);
       };
       el.appendChild(div);
     });
@@ -1548,6 +1573,23 @@ function renderDocPreview() {
   $("#doc-preview").innerHTML = renderMarkdown($("#doc-body-input").value);
 }
 
+// Ticking a checklist box in the preview edits the "[ ]"/"[x]" on that exact
+// source line and re-renders - same as any other manual edit, so it's
+// included next time "Save report" is clicked.
+$("#doc-preview").addEventListener("change", (e) => {
+  const cb = e.target.closest('input[type="checkbox"][data-line]');
+  if (!cb) return;
+  const idx = Number(cb.dataset.line);
+  const textarea = $("#doc-body-input");
+  const lines = textarea.value.split("\n");
+  if (lines[idx] === undefined) return;
+  lines[idx] = cb.checked
+    ? lines[idx].replace(/\[[ xX]\]/, "[x]")
+    : lines[idx].replace(/\[[ xX]\]/, "[ ]");
+  textarea.value = lines.join("\n");
+  renderDocPreview();
+});
+
 $("#doc-save-btn").onclick = async () => {
   await api(`/api/docs/${currentDocId}`, {
     method: "PATCH",
@@ -1575,36 +1617,53 @@ $("#doc-delete-btn").onclick = async () => {
 };
 
 function renderMarkdown(src) {
-  const codeBlocks = [];
-  let text = String(src ?? "").replace(/```([\s\S]*?)```/g, (_, code) => {
-    codeBlocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
-    return `${codeBlocks.length - 1}`;
-  });
-
-  const lines = text.split("\n");
+  // Walks the RAW source line-by-line (tracking whether we're inside a
+  // ``` fence as we go) instead of pre-substituting code blocks with a
+  // placeholder first - that used to shift every later line's index
+  // whenever a multi-line code block collapsed to one placeholder line,
+  // which would have made task-checkbox line numbers (below) point at the
+  // wrong line for any report that mixes code blocks with a checklist.
+  const rawLines = String(src ?? "").split("\n");
   const html = [];
   let inList = false;
   let inQuote = false;
+  let inCode = false;
+  let codeBuf = [];
 
   const closeList = () => { if (inList) { html.push("</ul>"); inList = false; } };
   const closeQuote = () => { if (inQuote) { html.push("</blockquote>"); inQuote = false; } };
+  const flushCode = () => { html.push(`<pre><code>${escapeHtml(codeBuf.join("\n"))}</code></pre>`); codeBuf = []; };
 
-  for (const line of lines) {
-    const codeMatch = line.trim().match(/^(\d+)$/);
-    if (codeMatch && codeBlocks[Number(codeMatch[1])] !== undefined) {
-      closeList(); closeQuote();
-      html.push(codeBlocks[Number(codeMatch[1])]);
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+
+    if (line.trim().startsWith("```")) {
+      if (inCode) { inCode = false; flushCode(); }
+      else { closeList(); closeQuote(); inCode = true; codeBuf = []; }
       continue;
     }
+    if (inCode) { codeBuf.push(line); continue; }
 
     const heading = line.match(/^(#{1,6})\s+(.*)$/);
-    const listItem = line.match(/^[-*]\s+(.*)$/);
+    // "- [ ] text" / "- [x] text" checklist items render as a live, clickable
+    // checkbox tied back to this exact source line - handy for study to-dos
+    // ("review chapter 3", "redo the subnetting exercises"...) that need
+    // ticking off without leaving the note.
+    const taskItem = line.match(/^[-*]\s+\[([ xX])\]\s+(.*)$/);
+    const listItem = !taskItem && line.match(/^[-*]\s+(.*)$/);
     const quoteItem = line.match(/^>\s?(.*)$/);
 
     if (heading) {
       closeList(); closeQuote();
       const level = heading[1].length;
       html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+    } else if (taskItem) {
+      closeQuote();
+      if (!inList) { html.push("<ul>"); inList = true; }
+      const checked = taskItem[1].toLowerCase() === "x";
+      html.push(
+        `<li class="task-item"><label><input type="checkbox" data-line="${i}"${checked ? " checked" : ""}> ${inline(taskItem[2])}</label></li>`
+      );
     } else if (listItem) {
       closeQuote();
       if (!inList) { html.push("<ul>"); inList = true; }
@@ -1620,6 +1679,7 @@ function renderMarkdown(src) {
       html.push(`<p>${inline(line)}</p>`);
     }
   }
+  if (inCode) flushCode(); // unterminated fence - still show what's there
   closeList(); closeQuote();
 
   return html.join("\n");

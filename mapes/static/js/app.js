@@ -234,6 +234,17 @@ canvas.addEventListener("dblclick", async (e) => {
   openNodeModal(null, { x, y });
 });
 
+// Quick sticky-note shortcut: drop a "note" node in the middle of whatever
+// part of the board is currently in view, and open it straight for typing -
+// no need to double-click an exact empty spot first.
+$("#add-note-btn").onclick = () => {
+  const x = (canvasWrapper.scrollLeft + canvasWrapper.clientWidth / 2) / state.zoom - 95;
+  const y = (canvasWrapper.scrollTop + canvasWrapper.clientHeight / 2) / state.zoom - 40;
+  openNodeModal(null, { x, y });
+  $("#node-type").value = "note";
+  setTimeout(() => $("#node-content").focus(), 50);
+};
+
 function renderCanvas() {
   // A node picked as the "connect from" source may have just been deleted
   // (directly, or via undo/redo) - drop the stale selection so a later click
@@ -251,6 +262,7 @@ function buildNodeEl(node) {
   const el = document.createElement("div");
   el.className = "node";
   el.dataset.id = node.id;
+  el.dataset.type = node.type;
   el.style.left = `${node.x}px`;
   el.style.top = `${node.y}px`;
   el.style.setProperty("--node-color", node.color || "#4f8cff");
@@ -363,10 +375,23 @@ function renderEdges() {
     const a = canvas.querySelector(`.node[data-id="${edge.source_id}"]`);
     const b = canvas.querySelector(`.node[data-id="${edge.target_id}"]`);
     if (!a || !b) return;
-    const ax = parseFloat(a.style.left) + a.offsetWidth / 2;
-    const ay = parseFloat(a.style.top) + a.offsetHeight / 2;
-    const bx = parseFloat(b.style.left) + b.offsetWidth / 2;
-    const by = parseFloat(b.style.top) + b.offsetHeight / 2;
+    const acx = parseFloat(a.style.left) + a.offsetWidth / 2;
+    const acy = parseFloat(a.style.top) + a.offsetHeight / 2;
+    const bcx = parseFloat(b.style.left) + b.offsetWidth / 2;
+    const bcy = parseFloat(b.style.top) + b.offsetHeight / 2;
+    // The line now renders above the node cards (so it can be clicked even
+    // where it'd otherwise be hidden under one), so pull each end back out
+    // of the card's body - both to look right and so the line's invisible
+    // click hitbox doesn't sit on top of the node's own clickable area.
+    const dx = bcx - acx, dy = bcy - acy;
+    const dist = Math.hypot(dx, dy) || 1;
+    const ux = dx / dist, uy = dy / dist;
+    const padA = Math.min(a.offsetWidth / 2 + 6, dist / 2 - 2);
+    const padB = Math.min(b.offsetWidth / 2 + 6, dist / 2 - 2);
+    const ax = acx + ux * padA;
+    const ay = acy + uy * padA;
+    const bx = bcx - ux * padB;
+    const by = bcy - uy * padB;
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
     line.setAttribute("x1", ax);
@@ -1368,6 +1393,39 @@ document.addEventListener("click", (e) => {
     minimizedBox.closest(".modal").classList.remove("minimized");
   }
 });
+
+// ---------- sidebar resize ----------
+
+(function setupSidebarResize() {
+  const sidebar = $("#sidebar");
+  const handle = $("#sidebar-resize-handle");
+  const MIN_W = 190;
+  const MAX_W = 480;
+  const saved = parseFloat(localStorage.getItem("mapes_sidebar_w"));
+  if (saved && saved >= MIN_W && saved <= MAX_W) sidebar.style.width = `${saved}px`;
+
+  let dragging = false;
+  handle.addEventListener("mousedown", (e) => {
+    dragging = true;
+    handle.classList.add("active");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+  });
+  window.addEventListener("mousemove", (e) => {
+    if (!dragging) return;
+    const w = Math.min(MAX_W, Math.max(MIN_W, e.clientX));
+    sidebar.style.width = `${w}px`;
+  });
+  window.addEventListener("mouseup", () => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove("active");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    localStorage.setItem("mapes_sidebar_w", parseFloat(sidebar.style.width));
+  });
+})();
 
 loadBoards();
 refreshFileStatus();

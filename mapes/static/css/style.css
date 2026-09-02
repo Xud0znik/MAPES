@@ -55,14 +55,31 @@ html, body {
 #app { display: flex; height: 100vh; }
 
 #sidebar {
-  width: 280px;
-  min-width: 280px;
+  position: relative;
+  width: 240px;
+  flex-shrink: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 18px 16px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* Drag-to-resize handle, like a chat app's sidebar - narrower by default,
+   but pull the right edge to make it wider or thinner. */
+#sidebar-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 10;
+}
+#sidebar-resize-handle:hover,
+#sidebar-resize-handle.active {
+  background: var(--accent-dim);
 }
 
 .brand {
@@ -347,6 +364,19 @@ button:disabled { opacity: .4; cursor: default; }
   border-radius: 10px 26px 10px 26px;
 }
 .node.selected { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 10px 26px 10px 26px; }
+
+/* Sticky-note look for "note" type nodes - warm paper tone + a slight tilt,
+   closer to a real Post-it than the dark tech-card style used by the other
+   node types, since notes are as likely to be a quick thought/reminder as
+   a structured record. */
+.node[data-type="note"] {
+  background:
+    linear-gradient(165deg, #3a3524, #2b2818) padding-box,
+    linear-gradient(135deg, #ffd86b, rgba(255,216,107,.15) 65%) border-box;
+  transform: rotate(-1deg);
+}
+.node[data-type="note"]:hover { transform: rotate(-1deg) translateY(-2px); }
+.node[data-type="note"] .node-title { color: #ffe9a8; }
 
 .node-icon-badge {
   position: absolute;

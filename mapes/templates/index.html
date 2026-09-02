@@ -10,6 +10,7 @@
 <body>
 <div id="app">
   <aside id="sidebar">
+    <div id="sidebar-resize-handle" title="Drag to resize"></div>
     <div class="brand"><img class="brand-mark" src="{{ url_for('static', filename='img/favicon.png') }}" alt="">MAPES</div>
 
     <div class="section-title">Boards</div>
@@ -74,14 +75,15 @@
           <button id="zoom-reset-btn" class="btn-ghost" title="Reset zoom">Reset</button>
         </div>
         <span class="toolbar-sep"></span>
+        <button id="add-note-btn" class="btn-ghost">🗒 Add note</button>
         <button id="connect-btn" class="btn-ghost">⌁ Connect nodes</button>
         <button id="delete-board-btn" class="btn-ghost danger">Delete board</button>
       </div>
       <div id="canvas-wrapper">
         <div id="canvas-sizer">
           <div id="canvas-content">
-            <svg id="edges-layer"></svg>
             <div id="canvas"></div>
+            <svg id="edges-layer"></svg>
           </div>
         </div>
       </div>

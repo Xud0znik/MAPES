@@ -526,6 +526,25 @@ button:disabled { opacity: .4; cursor: default; }
   gap: 14px;
   align-content: start;
 }
+.view-empty {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 60px 20px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.7;
+}
+.view-empty-icon { font-size: 34px; }
+tr.empty-row td {
+  text-align: center;
+  color: var(--muted);
+  padding: 40px 20px;
+}
 .vault-card {
   background: var(--panel-2);
   border: 1px solid var(--border);

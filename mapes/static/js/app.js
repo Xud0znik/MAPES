@@ -926,6 +926,10 @@ async function loadVault() {
   const items = await api(`/api/boards/${state.currentBoardId}/captures`);
   const grid = $("#vault-grid");
   grid.innerHTML = "";
+  if (!items.length) {
+    grid.innerHTML = `<div class="view-empty"><span class="view-empty-icon">🖼</span>No files yet - click "+ Upload file" above to add one.</div>`;
+    return;
+  }
   items.forEach((cap) => {
     const card = document.createElement("div");
     card.className = "vault-card";
@@ -1012,6 +1016,10 @@ async function loadCreds() {
   const items = await api(`/api/boards/${state.currentBoardId}/creds`);
   const tbody = $("#creds-tbody");
   tbody.innerHTML = "";
+  if (!items.length) {
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="6">🔑 No credentials yet - click "+ Credential" above to add one.</td></tr>`;
+    return;
+  }
   items.forEach((cred) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -1120,6 +1128,10 @@ async function loadFindings() {
   const items = await api(`/api/boards/${state.currentBoardId}/findings`);
   const list = $("#findings-list");
   list.innerHTML = "";
+  if (!items.length) {
+    list.innerHTML = `<div class="view-empty"><span class="view-empty-icon">⚑</span>No findings yet - click "+ Finding" above to add one.</div>`;
+    return;
+  }
   items.forEach((f) => {
     const card = document.createElement("div");
     card.className = `finding-card ${f.severity}`;

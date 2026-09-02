@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atlas</title>
+<link rel="icon" type="image/png" href="/static/atlasIcon.png">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-dash" viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><circle cx="7" cy="7.5" r="1"/><circle cx="7" cy="16.5" r="1"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M18 12v4M15 12v3"/></symbol>
+  <symbol id="i-radar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><path d="M12 12l6-4"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-.9 4"/><path d="M20 5v6h-6"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5L20 7"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4M5 4h11l-2 4 2 4H5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></symbol>
+  <symbol id="i-board" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M7 9h6M7 13h10"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M9 4h6l-1 6 3 3H7l3-3-1-6zM12 16v4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></symbol>
+  <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l4-1L20 7a2 2 0 0 0-3-3L5 16l-1 4z"/><path d="M15 6l3 3"/></symbol>
+  <symbol id="i-eraser" viewBox="0 0 24 24"><path d="M4 15l7-7 6 6-5 5H8l-4-4z"/><path d="M9 20h11"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24"><path d="M5 3h14v11l-5 5H5z"/><path d="M19 14h-5v5"/><path d="M8 8h8M8 11h5"/></symbol>
+  <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/></symbol>
+  <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="1"/><path d="M8 20h8M12 16v4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><path d="M4 21V6l8-3 8 3v15"/><path d="M9 21v-5h6v5M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01"/></symbol>
+  <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M6 18a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.3A4 4 0 0 1 18 18z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M4 7l8 6 8-6"/></symbol>
+  <symbol id="i-firewall" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 15h18M8 4v5M16 4v5M12 9v6M8 15v5M16 15v5"/></symbol>
+  <symbol id="i-router" viewBox="0 0 24 24"><rect x="3" y="13" width="18" height="6" rx="1"/><path d="M7 16h.01M11 16h4M12 13l3-4M16 9l2-3M8 13l-2-3"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6h6l2 2h10v11H3z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></symbol>
+  <symbol id="i-hex" viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h1"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M4 15h16M10 4v16M15 4v16"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
+  <!-- Active Directory flags -->
+  <symbol id="i-crown" viewBox="0 0 24 24"><path d="M4 18h16"/><path d="M5 18L3.4 8.4l5.1 3.6L12 5.4l3.5 6.6 5.1-3.6L19 18"/></symbol>
+  <symbol id="i-ticket" viewBox="0 0 24 24"><path d="M3 9.5V7h18v2.5a2.5 2.5 0 0 0 0 5V17H3v-2.5a2.5 2.5 0 0 0 0-5z"/><path d="M14 7v2M14 11.5v1M14 15v2"/></symbol>
+  <symbol id="i-unlock" viewBox="0 0 24 24"><rect x="4.5" y="11" width="15" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.6-1.7"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.6l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 12V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-3l-3-5a1.5 1.5 0 0 1 2.6-1.5L8 13"/></symbol>
+  <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .3c0 1.7-2.5 2-2.5 3.7M12 17h.01"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4M4 20h16"/></symbol>
+  <symbol id="i-cursor" viewBox="0 0 24 24"><path d="M5 3l6 16 2.5-6.5L20 10z"/></symbol>
+  <symbol id="i-atlas" viewBox="0 0 24 24"><path d="M12 3L4 20h4l4-10 4 10h4z"/><path d="M15.5 6.5l2-2M17 4l.5 2.5"/></symbol>
+  <symbol id="i-text" viewBox="0 0 24 24"><path d="M5 5h14M12 5v14M9 19h6"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M4 18l5-5 3.5 3.5L16 13l4 4"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.6"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c0-3.4 3-5.2 6.5-5.2s6.5 1.8 6.5 5.2"/><path d="M16.5 5.2a3.4 3.4 0 0 1 0 6.6M18 14.4c2.2.6 3.5 2.2 3.5 4.4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5.5l3.5 2"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 5.7 0l2.6-2.6a4 4 0 0 0-5.7-5.7L11.5 6"/><path d="M14 11a4 4 0 0 0-5.7 0l-2.6 2.6a4 4 0 0 0 5.7 5.7L12.5 18"/></symbol>
+  <symbol id="i-vault" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="11" cy="12" r="4"/><path d="M11 8v1.5M11 14.5V16M7 12h1.5M13.5 12H15M18 9v6"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+  <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M3 14h18M9 4v16"/></symbol>
+  <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 13h1.5a1.2 1.2 0 0 1 0 2.4H9V13v5M14 18v-5h2.2M14 15.5h1.8"/></symbol>
+  <symbol id="i-bold" viewBox="0 0 24 24"><path d="M7 4h6a4 4 0 0 1 0 8H7zM7 12h7a4 4 0 0 1 0 8H7z"/></symbol>
+  <symbol id="i-italic" viewBox="0 0 24 24"><path d="M10 4h8M6 20h8M14 4l-4 16"/></symbol>
+  <symbol id="i-h1" viewBox="0 0 24 24"><path d="M4 5v14M12 5v14M4 12h8M17 19v-8l-2 1.5"/></symbol>
+  <symbol id="i-list2" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M4 4h12l4 4v12H4z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></symbol>
+</svg>
+
+<div id="app">
+  <header class="topbar">
+    <div class="brand"><img class="brand-logo" src="/static/atlasIcon.png" alt="ATLAS"><span>ATLAS</span></div>
+    <span class="brand-sep"></span>
+    <!-- Custom dropdown, not a <select>: the native popup is drawn by the OS and
+         ignores the theme, so it always rendered as a white list on dark chrome. -->
+    <div class="proj-switch" id="proj-switch">
+      <button class="proj-btn" id="project-btn" type="button" title="Switch project"
+              aria-haspopup="listbox" aria-expanded="false">
+        <svg class="ic proj-ic"><use href="#i-folder"/></svg>
+        <span class="proj-name" id="project-name"></span>
+        <svg class="ic proj-cv"><use href="#i-chevron-down"/></svg>
+      </button>
+    </div>
+    <nav class="topnav">
+      <button class="navb on" data-v="over"><svg class="ic"><use href="#i-dash"/></svg>Overview</button>
+      <button class="navb" data-v="nodes"><svg class="ic"><use href="#i-layers"/></svg>Nodes</button>
+      <button class="navb" data-v="board"><svg class="ic"><use href="#i-board"/></svg>Board</button>
+      <button class="navb" data-v="vault"><svg class="ic"><use href="#i-vault"/></svg>Vault</button>
+      <button class="navb" data-v="loot"><svg class="ic"><use href="#i-key"/></svg>Credentials</button>
+      <button class="navb" data-v="findings"><svg class="ic"><use href="#i-flag"/></svg>Findings</button>
+      <button class="navb" data-v="docs"><svg class="ic"><use href="#i-note"/></svg>Reports</button>
+      <button class="navb" data-v="settings"><svg class="ic"><use href="#i-gear"/></svg>Settings</button>
+    </nav>
+    <div class="top-actions">
+      <button class="ic-btn" id="btn-theme" title="Switch theme"><svg class="ic"><use href="#i-moon"/></svg></button>
+      <button class="ic-btn" id="btn-wic" title="While it cracks" hidden><svg class="ic"><use href="#i-play"/></svg></button>
+      <button class="ic-btn" id="btn-help" title="Keyboard shortcuts"><svg class="ic"><use href="#i-help"/></svg></button>
+      <button class="ic-btn" id="new-project" title="New project"><svg class="ic"><use href="#i-plus"/></svg></button>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="view on" id="v-over"></section>
+    <section class="view" id="v-nodes"></section>
+    <section class="view" id="v-board"></section>
+    <section class="view" id="v-vault"></section>
+    <section class="view" id="v-loot"></section>
+    <section class="view" id="v-findings"></section>
+    <section class="view" id="v-docs"></section>
+    <section class="view" id="v-settings"></section>
+  </main>
+
+  <footer class="statusbar" id="statusbar" hidden></footer>
+</div>
+
+<div class="modal-wrap" id="modal-wrap" hidden>
+  <div class="modal" id="modal"></div>
+</div>
+
+<!-- Login gate. Hidden by default and shown only when /api/session says a
+     password is configured and this browser has no valid session. -->
+<div class="login-wrap" id="login-wrap" hidden>
+  <form class="login-card" id="login-form" autocomplete="on">
+    <img class="login-logo" src="/static/atlasIcon.png" alt="">
+    <h1 class="login-t">ATLAS</h1>
+    <p class="login-s">Sign in to open the audit board</p>
+    <label class="login-f">
+      <span>Username</span>
+      <input id="login-user" name="username" autocomplete="username" autofocus required>
+    </label>
+    <label class="login-f">
+      <span>Password</span>
+      <input id="login-pass" name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <div class="login-err" id="login-err" hidden></div>
+    <button class="btn pri login-go" id="login-go" type="submit">Sign in</button>
+    <div class="login-note" id="login-note"></div>
+  </form>
+</div>
+
+<div id="toast"></div>
+
+<script src="/static/cvss.js"></script>
+<script src="/static/hashid.js"></script>
+<script src="/static/game.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

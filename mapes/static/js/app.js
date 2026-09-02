@@ -1659,6 +1659,8 @@ function setDocEditorEnabled(enabled) {
     $("#doc-title-input").value = "";
     $("#doc-body-input").value = "";
     $("#doc-preview").innerHTML = "";
+    $("#doc-preview").classList.add("hidden");
+    $("#doc-body-input").classList.remove("hidden");
   }
 }
 
@@ -1668,7 +1670,8 @@ async function openDoc(id) {
   $("#doc-title-input").value = doc.title;
   $("#doc-body-input").value = doc.body;
   setDocEditorEnabled(true);
-  renderDocPreview();
+  if (doc.body.trim()) showDocPreviewMode();
+  else showDocEditMode();
   await loadDocs();
 }
 
@@ -1686,20 +1689,60 @@ function renderDocPreview() {
   $("#doc-preview").innerHTML = renderMarkdown($("#doc-body-input").value);
 }
 
-// Ticking a checklist box in the preview edits the "[ ]"/"[x]" on that exact
-// source line and re-renders - same as any other manual edit, so it's
-// included next time "Save report" is clicked.
-$("#doc-preview").addEventListener("click", (e) => {
-  const text = e.target.closest(".task-text");
-  if (!text) return;
-  const cb = text.previousElementSibling;
-  if (cb && cb.matches('input[type="checkbox"]')) {
-    cb.checked = !cb.checked;
-    cb.dispatchEvent(new Event("change", { bubbles: true }));
-  }
+// Reports uses one screen instead of a permanent split view: click the
+// (formatted) text to start typing in it directly, click away and it's
+// shown formatted again - closer to a normal document than a code editor
+// with a separate live-preview pane bolted on.
+function showDocPreviewMode() {
+  renderDocPreview();
+  $("#doc-body-input").classList.add("hidden");
+  $("#doc-preview").classList.remove("hidden");
+}
+function showDocEditMode() {
+  $("#doc-preview").classList.add("hidden");
+  $("#doc-body-input").classList.remove("hidden");
+  $("#doc-body-input").focus();
+}
+
+$("#doc-body-input").addEventListener("blur", async () => {
+  if (!currentDocId) return;
+  await api(`/api/docs/${currentDocId}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      title: $("#doc-title-input").value.trim() || "Report",
+      body: $("#doc-body-input").value,
+    }),
+  });
+  await loadDocs();
+  showDocPreviewMode();
 });
 
-$("#doc-preview").addEventListener("change", (e) => {
+$("#doc-title-input").addEventListener("blur", async () => {
+  if (!currentDocId) return;
+  await api(`/api/docs/${currentDocId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title: $("#doc-title-input").value.trim() || "Report" }),
+  });
+  await loadDocs();
+});
+
+// Ticking a checklist box in the preview edits the "[ ]"/"[x]" on that exact
+// source line and re-renders, without leaving preview mode. Clicking
+// anywhere else in the preview switches to edit mode.
+$("#doc-preview").addEventListener("click", (e) => {
+  const text = e.target.closest(".task-text");
+  if (text) {
+    const cb = text.previousElementSibling;
+    if (cb && cb.matches('input[type="checkbox"]')) {
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    return;
+  }
+  if (currentDocId) showDocEditMode();
+});
+
+$("#doc-preview").addEventListener("change", async (e) => {
   const cb = e.target.closest('input[type="checkbox"][data-line]');
   if (!cb) return;
   const idx = Number(cb.dataset.line);
@@ -1711,6 +1754,16 @@ $("#doc-preview").addEventListener("change", (e) => {
     : lines[idx].replace(/\[[ xX]\]/, "[ ]");
   textarea.value = lines.join("\n");
   renderDocPreview();
+  // Ticking a box happens while in preview mode (no textarea blur to hang
+  // an autosave off of), so save it immediately rather than only on the
+  // next explicit "Save report" click.
+  if (currentDocId) {
+    await api(`/api/docs/${currentDocId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ body: textarea.value }),
+    });
+    await loadDocs();
+  }
 });
 
 $("#doc-save-btn").onclick = async () => {

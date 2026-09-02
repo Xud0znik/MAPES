@@ -515,7 +515,7 @@ button:disabled { opacity: .4; cursor: default; }
   cursor: pointer;
 }
 .tasklist-item input[type="checkbox"] { flex-shrink: 0; margin-top: 2px; accent-color: var(--accent); cursor: pointer; }
-.tasklist-item .task-text { min-width: 0; overflow-wrap: anywhere; }
+.tasklist-item .task-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .tasklist-item:has(input:checked) .task-text { color: var(--muted); text-decoration: line-through; }
 .node-task-add {
   margin-top: 8px;
@@ -894,7 +894,8 @@ tr.empty-row td {
 
 .reports-editor { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 14px 18px; gap: 10px; }
 #doc-title-input { font-size: 15px; font-weight: 600; }
-.reports-panes { flex: 1; display: flex; gap: 12px; min-height: 0; }
+.reports-panes { flex: 1; display: flex; min-height: 0; }
+.reports-hint { font-size: 11px; color: var(--muted); }
 #doc-body-input {
   flex: 1;
   resize: none;
@@ -918,6 +919,12 @@ tr.empty-row td {
   line-height: 1.6;
   overflow-wrap: anywhere;
   word-break: break-word;
+  cursor: text;
+}
+.doc-preview:empty::before {
+  content: "Click to start writing...";
+  color: var(--muted);
+  font-style: italic;
 }
 .doc-preview h1, .doc-preview h2, .doc-preview h3 { margin: .6em 0 .3em; }
 .doc-preview code { background: var(--panel-3); padding: 1px 5px; border-radius: 4px; font-size: .9em; overflow-wrap: anywhere; }

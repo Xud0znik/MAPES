@@ -128,9 +128,10 @@
         <div class="reports-editor">
           <input id="doc-title-input" type="text" placeholder="Report title" disabled>
           <div class="reports-panes">
-            <textarea id="doc-body-input" placeholder="Write in Markdown..." disabled></textarea>
-            <div id="doc-preview" class="doc-preview"></div>
+            <textarea id="doc-body-input" placeholder="Write in Markdown... (# heading, **bold**, - [ ] task)" disabled></textarea>
+            <div id="doc-preview" class="doc-preview" tabindex="0"></div>
           </div>
+          <div class="reports-hint">Click the text to edit - click away to see it formatted, like a document.</div>
           <div class="reports-actions">
             <button id="doc-save-btn" class="btn-primary" disabled>Save report</button>
             <button id="doc-export-btn" class="btn-secondary" disabled>⭳ Export .md</button>

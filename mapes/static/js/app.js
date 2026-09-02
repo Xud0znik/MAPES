@@ -771,28 +771,37 @@ contextMenu.addEventListener("click", async (e) => {
   const action = e.target.dataset.action;
   if (!action || !contextNode) return;
   e.stopPropagation();
+  // Snapshot the node now: confirm() below blocks while a native dialog is
+  // shown, and on some webview backends that dialog stealing focus fires a
+  // window "blur" event, which our own blur handler uses to close this menu
+  // and null out contextNode - via a queued event that finally runs once
+  // this handler hits its first await. Reading contextNode again after that
+  // (the old code did) threw on a null reference and aborted the function
+  // silently: the DELETE request had already gone out and succeeded on the
+  // server, but the follow-up code that removes the node from the screen
+  // never ran, so a deleted node stayed visible until the next reload.
+  const node = contextNode;
   if (action === "delete") {
-    if (confirm(`Delete node "${contextNode.title}"?`)) {
-      const nodeRef = { ...contextNode };
-      await api(`/api/nodes/${contextNode.id}`, { method: "DELETE" });
-      state.nodes = state.nodes.filter((n) => n.id !== contextNode.id);
+    if (confirm(`Delete node "${node.title}"?`)) {
+      await api(`/api/nodes/${node.id}`, { method: "DELETE" });
+      state.nodes = state.nodes.filter((n) => n.id !== node.id);
       state.edges = state.edges.filter(
-        (ed) => ed.source_id !== contextNode.id && ed.target_id !== contextNode.id
+        (ed) => ed.source_id !== node.id && ed.target_id !== node.id
       );
-      pushHistory(makeDeleteNodeAction(nodeRef));
+      pushHistory(makeDeleteNodeAction({ ...node }));
       renderCanvas();
     }
   } else if (action === "duplicate") {
     const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
       method: "POST",
       body: JSON.stringify({
-        title: `${contextNode.title} (copy)`,
-        type: contextNode.type,
-        color: contextNode.color,
-        tags: contextNode.tags,
-        content: contextNode.content,
-        x: contextNode.x + 30,
-        y: contextNode.y + 30,
+        title: `${node.title} (copy)`,
+        type: node.type,
+        color: node.color,
+        tags: node.tags,
+        content: node.content,
+        x: node.x + 30,
+        y: node.y + 30,
       }),
     });
     state.nodes.push(created);

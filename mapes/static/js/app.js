@@ -156,6 +156,7 @@ function renderCanvas() {
   canvas.querySelectorAll(".node").forEach((n) => n.remove());
   state.nodes.forEach((node) => canvas.appendChild(buildNodeEl(node)));
   renderEdges();
+  canvasWrapper.classList.toggle("empty", state.nodes.length === 0);
 }
 
 function buildNodeEl(node) {

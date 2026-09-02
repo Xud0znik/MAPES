@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MAPES</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
 <div id="app">
   <aside id="sidebar">
-    <div class="brand"><span class="brand-mark"></span>MAPES</div>
+    <div class="brand"><img class="brand-mark" src="{{ url_for('static', filename='img/favicon.png') }}" alt="">MAPES</div>
 
     <div class="section-title">Карты</div>
     <div id="board-list"></div>

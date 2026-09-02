@@ -289,16 +289,21 @@ button:disabled { opacity: .4; cursor: default; }
   flex: 1;
   overflow: auto;
   background-color: var(--bg);
-  background-image: radial-gradient(circle, #262c3a 1px, transparent 1px);
-  background-size: 26px 26px;
+  background-image:
+    radial-gradient(ellipse 900px 700px at 50% 0%, #1a2030 0%, transparent 70%),
+    radial-gradient(circle, #262c3a 1px, transparent 1px);
+  background-size: 100% 100%, 26px 26px;
+  background-attachment: fixed, scroll;
 }
 #canvas-wrapper.empty {
   background-image:
+    radial-gradient(ellipse 900px 700px at 50% 0%, #1a2030 0%, transparent 70%),
     radial-gradient(circle, #262c3a 1px, transparent 1px),
     url("../img/empty-board.png");
-  background-size: 26px 26px, min(700px, 70%) auto;
-  background-position: 0 0, center;
-  background-repeat: repeat, no-repeat;
+  background-size: 100% 100%, 26px 26px, min(700px, 70%) auto;
+  background-position: 0 0, 0 0, center;
+  background-repeat: no-repeat, repeat, no-repeat;
+  background-attachment: fixed, scroll, scroll;
 }
 
 #canvas-sizer {
@@ -554,9 +559,9 @@ button:disabled { opacity: .4; cursor: default; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 16px;
   background: var(--node-color, var(--accent));
-  box-shadow: 0 3px 10px rgba(0,0,0,.5), 0 0 0 3px var(--panel);
+  box-shadow: 0 3px 10px rgba(0,0,0,.5), 0 0 0 3px var(--panel), 0 0 14px -2px var(--node-color, var(--accent));
 }
 
 .node .node-type {

@@ -25,7 +25,7 @@ const NODE_ICONS = {
   account: "🔑",
   link: "🔗",
   file: "📄",
-  other: "▫",
+  other: "✦",
   image: "🖼",
   tasks: "☑",
 };
@@ -926,20 +926,41 @@ contextMenu.addEventListener("click", async (e) => {
 
 // ---------- node modal ----------
 
+// A distinct default color per type, so a fresh board fills in with actual
+// variety instead of everything defaulting to the same blue until someone
+// manually picks a color for each node.
+const TYPE_DEFAULT_COLOR = {
+  note: "#ffd86b",
+  host: "#37d67a",
+  account: "#c77dff",
+  link: "#5b8cff",
+  file: "#ff9f4d",
+  other: "#8b94a7",
+};
+
 function openNodeModal(node, defaults = {}) {
   state.editingNodeId = node ? node.id : null;
   $("#modal-title").textContent = node ? "Edit node" : "New node";
   $("#node-title").value = node ? node.title : "";
   $("#node-type").value = node ? node.type : "note";
-  $("#node-color").value = node ? node.color : "#4f8cff";
+  $("#node-color").value = node ? node.color : TYPE_DEFAULT_COLOR.note;
   $("#node-tags").value = node ? node.tags : "";
   $("#node-content").value = node ? node.content : "";
   $("#node-delete").style.display = node ? "inline-block" : "none";
   $("#node-modal").dataset.x = node ? node.x : defaults.x;
   $("#node-modal").dataset.y = node ? node.y : defaults.y;
-  $("#node-modal").dataset.origColor = node ? node.color : "#4f8cff";
+  $("#node-modal").dataset.origColor = node ? node.color : TYPE_DEFAULT_COLOR.note;
   $("#node-modal").classList.remove("hidden", "minimized");
 }
+
+// Only for a brand-new node (not yet saved): picking a different type also
+// switches the color swatch to that type's default, so you don't have to
+// manually re-pick a color every time just to get some visual variety.
+$("#node-type").addEventListener("change", () => {
+  if (state.editingNodeId) return;
+  const def = TYPE_DEFAULT_COLOR[$("#node-type").value];
+  if (def) $("#node-color").value = def;
+});
 
 function closeNodeModal() {
   $("#node-modal").classList.add("hidden");

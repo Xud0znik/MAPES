@@ -584,12 +584,14 @@ tr.empty-row td {
 
 /* ---------- data table (credentials) ---------- */
 
-.data-table {
+.table-scroll {
   flex: 1;
   overflow-y: auto;
-  width: auto;
-  border-collapse: collapse;
   margin: 0 18px 18px;
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 13px;
 }
 .data-table thead th {

@@ -1,6 +1,8 @@
 import sqlite3
 from pathlib import Path
 
+from flask import g, has_app_context
+
 from .paths import app_dir
 
 DATA_DIR = app_dir() / "data"
@@ -38,6 +40,8 @@ CREATE TABLE IF NOT EXISTS nodes (
     color TEXT DEFAULT '#4f8cff',
     x REAL DEFAULT 0,
     y REAL DEFAULT 0,
+    width REAL,
+    height REAL,
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
@@ -112,12 +116,40 @@ CREATE INDEX IF NOT EXISTS idx_docs_board ON docs(board_id);
 """
 
 
-def get_connection():
+def _new_connection():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Let SQLite itself wait/retry for up to 10s when another connection
+    # briefly holds the write lock, instead of raising "database is locked"
+    # right away. WAL mode also lets readers and a writer work at the same
+    # time instead of blocking each other outright.
+    conn.execute("PRAGMA busy_timeout = 10000")
+    conn.execute("PRAGMA journal_mode = WAL")
     return conn
+
+
+def get_connection():
+    """One connection per request: reused across every get_connection() call
+    within the same request, and closed exactly once in app.py's
+    teardown_appcontext handler when the request ends - including when it
+    ends via an unhandled exception. Endpoint code should NOT call
+    conn.close() itself; a request that used to raise partway through a
+    handler (e.g. on a bad write) previously leaked that connection with an
+    open transaction, silently holding the database's write lock and making
+    every request after it fail with "database is locked" until the whole
+    app was restarted.
+
+    Falls back to a plain one-off connection (caller's responsibility to
+    close) when there's no active Flask app context - e.g. init_db() at
+    startup, before any request has come in.
+    """
+    if has_app_context():
+        if "db_conn" not in g:
+            g.db_conn = _new_connection()
+        return g.db_conn
+    return _new_connection()
 
 
 def captures_dir_for(board_id):
@@ -144,10 +176,22 @@ def backup_to(dest_path):
         dest_conn.close()
 
 
+def _ensure_column(conn, table, column, coltype):
+    """Add a column to an existing table if it's not already there - for
+    databases created before that column existed. CREATE TABLE IF NOT
+    EXISTS alone doesn't retrofit columns onto a table that already exists
+    on disk, so new columns need this instead of just editing SCHEMA."""
+    cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+
+
 def init_db():
     conn = get_connection()
     try:
         conn.executescript(SCHEMA)
+        _ensure_column(conn, "nodes", "width", "REAL")
+        _ensure_column(conn, "nodes", "height", "REAL")
         conn.commit()
         row = conn.execute("SELECT COUNT(*) AS c FROM boards").fetchone()
         if row["c"] == 0:

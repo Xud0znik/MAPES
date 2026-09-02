@@ -6,6 +6,8 @@ const state = {
   nodeCounts: {},
   connectMode: false,
   connectSource: null,
+  addNoteMode: false,
+  minimizedImageIds: new Set(),
   editingNodeId: null,
   zoom: 1,
 };
@@ -23,6 +25,7 @@ const NODE_ICONS = {
   link: "🔗",
   file: "📄",
   other: "▫",
+  image: "🖼",
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -234,16 +237,93 @@ canvas.addEventListener("dblclick", async (e) => {
   openNodeModal(null, { x, y });
 });
 
-// Quick sticky-note shortcut: drop a "note" node in the middle of whatever
-// part of the board is currently in view, and open it straight for typing -
-// no need to double-click an exact empty spot first.
+// Sticky-note tool, like Windows Sticky Notes: click the toolbar button to
+// arm it, then click anywhere on the board to drop a note right there and
+// start typing immediately - no modal, no double-click precision needed.
+// Stays armed so several notes can be placed in a row; click the button
+// again (or Esc) to turn it off.
 $("#add-note-btn").onclick = () => {
-  const x = (canvasWrapper.scrollLeft + canvasWrapper.clientWidth / 2) / state.zoom - 95;
-  const y = (canvasWrapper.scrollTop + canvasWrapper.clientHeight / 2) / state.zoom - 40;
-  openNodeModal(null, { x, y });
-  $("#node-type").value = "note";
-  setTimeout(() => $("#node-content").focus(), 50);
+  state.addNoteMode = !state.addNoteMode;
+  $("#add-note-btn").classList.toggle("active", state.addNoteMode);
+  canvasWrapper.classList.toggle("note-tool-active", state.addNoteMode);
 };
+
+canvas.addEventListener("click", async (e) => {
+  if (!state.addNoteMode || e.target !== canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / state.zoom - 95;
+  const y = (e.clientY - rect.top) / state.zoom - 20;
+  const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+    method: "POST",
+    body: JSON.stringify({ title: "Note", type: "note", content: "", x, y }),
+  });
+  state.nodes.push(created);
+  pushHistory(makeCreateNodeAction(created));
+  renderCanvas();
+  const quickText = canvas.querySelector(`.node[data-id="${created.id}"] .node-quick-text`);
+  if (quickText) startQuickNoteEdit(quickText, created);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && state.addNoteMode) {
+    state.addNoteMode = false;
+    $("#add-note-btn").classList.remove("active");
+    canvasWrapper.classList.remove("note-tool-active");
+  }
+});
+
+// Paste an image (Ctrl+V) straight onto the board - like pasting into any
+// other app. Only acts while the Board tab is showing and focus isn't in a
+// text field/modal (so pasting into a note or a form still just pastes text
+// there as normal).
+let lastCanvasMouse = { x: BASE_W / 2, y: BASE_H / 2 };
+canvasWrapper.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  lastCanvasMouse = {
+    x: (e.clientX - rect.left) / state.zoom,
+    y: (e.clientY - rect.top) / state.zoom,
+  };
+});
+
+document.addEventListener("paste", async (e) => {
+  if (state.currentView !== "board" || !state.currentBoardId) return;
+  const active = document.activeElement;
+  const inTextField = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+  if (inTextField) return;
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  const imageItem = Array.from(items).find((it) => it.type.startsWith("image/"));
+  if (!imageItem) return;
+  e.preventDefault();
+  const file = imageItem.getAsFile();
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const dataUrl = reader.result;
+    const img = new Image();
+    img.onload = async () => {
+      const scale = Math.min(1, 320 / Math.max(img.naturalWidth, img.naturalHeight)) || 1;
+      const w = Math.max(IMAGE_MIN_W, Math.round(img.naturalWidth * scale));
+      const h = Math.max(IMAGE_MIN_H, Math.round(img.naturalHeight * scale));
+      const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "image",
+          title: "Pasted image",
+          content: dataUrl,
+          x: lastCanvasMouse.x - w / 2,
+          y: lastCanvasMouse.y - h / 2,
+          width: w,
+          height: h,
+        }),
+      });
+      state.nodes.push(created);
+      pushHistory(makeCreateNodeAction(created));
+      renderCanvas();
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+});
 
 function renderCanvas() {
   // A node picked as the "connect from" source may have just been deleted
@@ -266,15 +346,31 @@ function buildNodeEl(node) {
   el.style.left = `${node.x}px`;
   el.style.top = `${node.y}px`;
   el.style.setProperty("--node-color", node.color || "#4f8cff");
+  const isNote = node.type === "note";
+  const isImage = node.type === "image";
+
+  if (isImage) {
+    return buildImageNodeEl(el, node);
+  }
+
   el.innerHTML = `
     <div class="node-icon-badge">${NODE_ICONS[node.type] || NODE_ICONS.other}</div>
     <div class="node-type">${escapeHtml(node.type)}</div>
     <div class="node-title">${escapeHtml(node.title)}</div>
     ${node.tags ? `<div class="node-tags">#${escapeHtml(node.tags).replace(/,\s*/g, " #")}</div>` : ""}
+    ${isNote ? `<div class="node-quick-text" data-placeholder="Click to write...">${escapeHtml(node.content || "")}</div>` : ""}
     <div class="node-badges"></div>
   `;
   updateNodeBadges(el, node);
   makeDraggable(el, node);
+  if (isNote) {
+    const quickText = el.querySelector(".node-quick-text");
+    quickText.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (el._dragMoved) { el._dragMoved = false; return; }
+      startQuickNoteEdit(quickText, node);
+    });
+  }
   el.addEventListener("click", (e) => {
     e.stopPropagation();
     if (el._dragMoved) {
@@ -293,6 +389,114 @@ function buildNodeEl(node) {
     openContextMenu(e.clientX, e.clientY, node);
   });
   return el;
+}
+
+const IMAGE_DEFAULT_W = 220;
+const IMAGE_DEFAULT_H = 160;
+const IMAGE_MIN_W = 80;
+const IMAGE_MIN_H = 60;
+
+// Pasted-image nodes: pure image on the card, resizable by dragging its
+// corner, and collapsible to a small chip via the minimize button - like a
+// photo pinned to the board rather than a text record.
+function buildImageNodeEl(el, node) {
+  el.classList.add("node-image-card");
+  if (state.minimizedImageIds.has(node.id)) el.classList.add("minimized");
+  const w = node.width || IMAGE_DEFAULT_W;
+  const h = node.height || IMAGE_DEFAULT_H;
+  el.style.width = `${w}px`;
+  el.innerHTML = `
+    <div class="node-image-toolbar">
+      <button type="button" class="node-image-min-btn" title="Minimize/restore">−</button>
+    </div>
+    <div class="node-image-wrap" style="height:${h}px">
+      <img src="${node.content}" class="node-image" draggable="false">
+      <div class="node-image-resize-handle" title="Drag to resize"></div>
+    </div>
+  `;
+  const wrap = el.querySelector(".node-image-wrap");
+  makeDraggable(el, node);
+
+  el.querySelector(".node-image-min-btn").addEventListener("mousedown", (e) => e.stopPropagation());
+  el.querySelector(".node-image-min-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (state.minimizedImageIds.has(node.id)) state.minimizedImageIds.delete(node.id);
+    else state.minimizedImageIds.add(node.id);
+    el.classList.toggle("minimized");
+  });
+
+  const handle = el.querySelector(".node-image-resize-handle");
+  handle.addEventListener("mousedown", (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    const startW = parseFloat(el.style.width) || w;
+    const startH = wrap.offsetHeight;
+    const onMove = (ev) => {
+      const newW = Math.max(IMAGE_MIN_W, startW + (ev.clientX - startX) / state.zoom);
+      const newH = Math.max(IMAGE_MIN_H, startH + (ev.clientY - startY) / state.zoom);
+      el.style.width = `${newW}px`;
+      wrap.style.height = `${newH}px`;
+      renderEdges();
+    };
+    const onUp = async () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      const newW = parseFloat(el.style.width);
+      const newH = wrap.offsetHeight;
+      node.width = newW;
+      node.height = newH;
+      await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify({ width: newW, height: newH }) });
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, node);
+  });
+  return el;
+}
+
+// Type directly into a sticky note's body, right on the card - like Windows
+// Sticky Notes - instead of going through the edit modal for a quick thought.
+function startQuickNoteEdit(quickText, node) {
+  quickText.contentEditable = "true";
+  quickText.classList.add("editing");
+  quickText.focus();
+  const range = document.createRange();
+  range.selectNodeContents(quickText);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  const finish = async () => {
+    quickText.removeEventListener("blur", finish);
+    quickText.removeEventListener("keydown", onKeydown);
+    quickText.contentEditable = "false";
+    quickText.classList.remove("editing");
+    const text = quickText.textContent;
+    if (text === node.content) return;
+    node.content = text;
+    if (!node.title || node.title === "Note") {
+      node.title = (text.split("\n")[0] || "Note").slice(0, 40) || "Note";
+    }
+    await api(`/api/nodes/${node.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ content: text, title: node.title }),
+    });
+    const el = canvas.querySelector(`.node[data-id="${node.id}"] .node-title`);
+    if (el) el.textContent = node.title;
+  };
+  const onKeydown = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); quickText.blur(); }
+    e.stopPropagation();
+  };
+  quickText.addEventListener("blur", finish);
+  quickText.addEventListener("keydown", onKeydown);
 }
 
 function updateNodeBadges(el, node) {
@@ -370,6 +574,7 @@ function makeDraggable(el, node) {
 }
 
 function renderEdges() {
+  hideEdgeTrash();
   edgesLayer.innerHTML = "";
   state.edges.forEach((edge) => {
     const a = canvas.querySelector(`.node[data-id="${edge.source_id}"]`);
@@ -413,44 +618,83 @@ function renderEdges() {
     hit.setAttribute("stroke-width", "18");
     hit.style.pointerEvents = "stroke";
     hit.style.cursor = "pointer";
+
+    const deleteThisEdge = async () => {
+      hideEdgeTrash();
+      await api(`/api/edges/${edge.id}`, { method: "DELETE" });
+      state.edges = state.edges.filter((x) => x.id !== edge.id);
+      renderEdges();
+      pushHistory({
+        undo: async () => {
+          const recreated = await api(`/api/boards/${state.currentBoardId}/edges`, {
+            method: "POST",
+            body: JSON.stringify({ source_id: edge.source_id, target_id: edge.target_id, label: edge.label }),
+          });
+          edge.id = recreated.id;
+          state.edges.push(recreated);
+          renderEdges();
+        },
+        redo: async () => {
+          await api(`/api/edges/${edge.id}`, { method: "DELETE" });
+          state.edges = state.edges.filter((x) => x.id !== edge.id);
+          renderEdges();
+        },
+      });
+    };
+
+    let hoverTimer = null;
     hit.addEventListener("mouseenter", () => {
       line.setAttribute("stroke", "#ff5f6d");
       line.setAttribute("stroke-width", "3");
       line.setAttribute("opacity", "0.95");
     });
+    hit.addEventListener("mousemove", (e) => {
+      if (hoverTimer || edgeTrashEl) return;
+      hoverTimer = setTimeout(() => {
+        hoverTimer = null;
+        showEdgeTrash(e.clientX, e.clientY, deleteThisEdge);
+      }, 700);
+    });
     hit.addEventListener("mouseleave", () => {
       line.setAttribute("stroke", "#4f8cff");
       line.setAttribute("stroke-width", "2");
       line.setAttribute("opacity", "0.6");
-    });
-    hit.addEventListener("click", async () => {
-      if (confirm("Delete this connection?")) {
-        await api(`/api/edges/${edge.id}`, { method: "DELETE" });
-        state.edges = state.edges.filter((x) => x.id !== edge.id);
-        renderEdges();
-        pushHistory({
-          undo: async () => {
-            const recreated = await api(`/api/boards/${state.currentBoardId}/edges`, {
-              method: "POST",
-              body: JSON.stringify({ source_id: edge.source_id, target_id: edge.target_id, label: edge.label }),
-            });
-            edge.id = recreated.id;
-            state.edges.push(recreated);
-            renderEdges();
-          },
-          redo: async () => {
-            await api(`/api/edges/${edge.id}`, { method: "DELETE" });
-            state.edges = state.edges.filter((x) => x.id !== edge.id);
-            renderEdges();
-          },
-        });
-      }
+      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
     });
     group.appendChild(line);
     group.appendChild(hit);
     edgesLayer.appendChild(group);
   });
 }
+
+// Small floating trash button that appears near the cursor ~700ms after it
+// rests on a connection line, and instantly deletes that line on click - no
+// confirmation dialog, since it already takes a deliberate pause + a
+// deliberate click to get there.
+let edgeTrashEl = null;
+function hideEdgeTrash() {
+  if (edgeTrashEl) { edgeTrashEl.remove(); edgeTrashEl = null; }
+}
+function showEdgeTrash(clientX, clientY, onDelete) {
+  hideEdgeTrash();
+  const btn = document.createElement("div");
+  btn.className = "edge-trash-btn";
+  btn.textContent = "🗑";
+  btn.style.left = `${clientX}px`;
+  btn.style.top = `${clientY - 30}px`;
+  btn.addEventListener("mousedown", (e) => e.stopPropagation());
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onDelete();
+  });
+  btn.addEventListener("mouseleave", hideEdgeTrash);
+  document.body.appendChild(btn);
+  edgeTrashEl = btn;
+}
+document.addEventListener("scroll", hideEdgeTrash, true);
+document.addEventListener("mousedown", (e) => {
+  if (edgeTrashEl && e.target !== edgeTrashEl) hideEdgeTrash();
+});
 
 // ---------- connect mode ----------
 
@@ -729,7 +973,7 @@ $("#search-input").addEventListener("input", (e) => {
 
 // ---------- export / import ----------
 
-$("#export-btn").onclick = () => {
+$("#export-btn").onclick = async () => {
   if (!state.currentBoardId) return;
   const board = state.boards.find((b) => b.id === state.currentBoardId);
   const nodeIndex = new Map(state.nodes.map((n, i) => [n.id, i]));
@@ -752,11 +996,26 @@ $("#export-btn").onclick = () => {
       label: e.label,
     })),
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const json = JSON.stringify(payload, null, 2);
+  const filename = `${(board.name || "mapes-board").replace(/[^\w\-]+/g, "_")}.json`;
+
+  // Inside the native app window, a plain <a download> click often does
+  // nothing (pywebview's embedded browser doesn't reliably wire up the
+  // download flow a real browser tab has) - use the native save dialog
+  // + explicit file write instead, same pattern as "Save As".
+  if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_export_json_file) {
+    const path = await window.pywebview.api.pick_export_json_file(filename);
+    if (!path) return;
+    const result = await window.pywebview.api.write_text_file(path, json);
+    if (result !== true) alert(`Could not write the file: ${result}`);
+    return;
+  }
+
+  const blob = new Blob([json], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${(board.name || "mapes-board").replace(/[^\w\-]+/g, "_")}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();

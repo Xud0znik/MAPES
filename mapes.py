@@ -99,6 +99,40 @@ class Api:
         except Exception:
             return None
 
+    def pick_export_json_file(self, default_name):
+        """For "Export board to JSON" - pick a destination .json file.
+
+        Native app windows (pywebview) don't reliably support a plain HTML
+        <a download> click the way a real browser tab does, so exporting
+        needs this same native-picker + explicit-write approach as
+        Save As, instead of a browser-only download trick."""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+
+            root = tk.Tk()
+            root.withdraw()
+            root.attributes("-topmost", True)
+            chosen = filedialog.asksaveasfilename(
+                title="Export board to JSON",
+                defaultextension=".json",
+                filetypes=[("JSON", "*.json"), ("All files", "*.*")],
+                initialfile=default_name or "mapes-board.json",
+            )
+            root.destroy()
+            return chosen or None
+        except Exception:
+            return None
+
+    def write_text_file(self, path, content):
+        """Write UTF-8 text content to an arbitrary path - used together
+        with pick_export_json_file()."""
+        try:
+            Path(path).write_text(content, encoding="utf-8")
+            return True
+        except Exception as exc:
+            return f"error: {exc}"
+
 
 def main():
     data_dir = resolve_data_dir()

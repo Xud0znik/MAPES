@@ -5,7 +5,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, render_template
+from flask import Flask, Response, g, jsonify, request, render_template
 
 from . import crypto, db
 from .config import load_config, save_config
@@ -26,6 +26,15 @@ def create_app():
         static_folder=str(root / "static"),
     )
     init_db()
+
+    @app.teardown_appcontext
+    def _close_db_connection(exception=None):
+        # Guaranteed to run even when the request raised, so a failed write
+        # can never leak an open connection holding the database's write
+        # lock - see the docstring on db.get_connection().
+        conn = g.pop("db_conn", None)
+        if conn is not None:
+            conn.close()
 
     @app.errorhandler(sqlite3.IntegrityError)
     def handle_integrity_error(err):
@@ -53,7 +62,6 @@ def create_app():
     def list_boards():
         conn = get_connection()
         rows = conn.execute("SELECT * FROM boards ORDER BY id").fetchall()
-        conn.close()
         return jsonify([dict(r) for r in rows])
 
     @app.post("/api/boards")
@@ -72,7 +80,6 @@ def create_app():
         board = conn.execute(
             "SELECT * FROM boards WHERE id = ?", (cur.lastrowid,)
         ).fetchone()
-        conn.close()
         return jsonify(dict(board)), 201
 
     @app.put("/api/boards/<int:board_id>")
@@ -81,7 +88,6 @@ def create_app():
         conn = get_connection()
         board = conn.execute("SELECT * FROM boards WHERE id = ?", (board_id,)).fetchone()
         if not board:
-            conn.close()
             return jsonify({"error": "not found"}), 404
         name = data.get("name", board["name"])
         description = data.get("description", board["description"])
@@ -91,7 +97,6 @@ def create_app():
         )
         conn.commit()
         board = conn.execute("SELECT * FROM boards WHERE id = ?", (board_id,)).fetchone()
-        conn.close()
         return jsonify(dict(board))
 
     @app.delete("/api/boards/<int:board_id>")
@@ -99,7 +104,6 @@ def create_app():
         conn = get_connection()
         conn.execute("DELETE FROM boards WHERE id = ?", (board_id,))
         conn.commit()
-        conn.close()
         return "", 204
 
     # ---------- nodes ----------
@@ -110,7 +114,6 @@ def create_app():
         rows = conn.execute(
             "SELECT * FROM nodes WHERE board_id = ? ORDER BY id", (board_id,)
         ).fetchall()
-        conn.close()
         return jsonify([dict(r) for r in rows])
 
     @app.post("/api/boards/<int:board_id>/nodes")
@@ -119,8 +122,8 @@ def create_app():
         title = (data.get("title") or "Untitled").strip()
         conn = get_connection()
         cur = conn.execute(
-            """INSERT INTO nodes (board_id, type, title, content, tags, color, x, y)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO nodes (board_id, type, title, content, tags, color, x, y, width, height)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 board_id,
                 data.get("type", "note"),
@@ -130,11 +133,12 @@ def create_app():
                 data.get("color", "#4f8cff"),
                 data.get("x", 40),
                 data.get("y", 40),
+                data.get("width"),
+                data.get("height"),
             ),
         )
         conn.commit()
         node = conn.execute("SELECT * FROM nodes WHERE id = ?", (cur.lastrowid,)).fetchone()
-        conn.close()
         return jsonify(dict(node)), 201
 
     @app.put("/api/nodes/<int:node_id>")
@@ -143,10 +147,9 @@ def create_app():
         conn = get_connection()
         node = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
         if not node:
-            conn.close()
             return jsonify({"error": "not found"}), 404
         fields = {}
-        for key in ("type", "title", "content", "tags", "color", "x", "y"):
+        for key in ("type", "title", "content", "tags", "color", "x", "y", "width", "height"):
             if key in data:
                 fields[key] = data[key]
         if fields:
@@ -157,7 +160,6 @@ def create_app():
             )
             conn.commit()
         node = conn.execute("SELECT * FROM nodes WHERE id = ?", (node_id,)).fetchone()
-        conn.close()
         return jsonify(dict(node))
 
     @app.delete("/api/nodes/<int:node_id>")
@@ -165,7 +167,6 @@ def create_app():
         conn = get_connection()
         conn.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
         conn.commit()
-        conn.close()
         return "", 204
 
     # ---------- edges ----------
@@ -176,7 +177,6 @@ def create_app():
         rows = conn.execute(
             "SELECT * FROM edges WHERE board_id = ? ORDER BY id", (board_id,)
         ).fetchall()
-        conn.close()
         return jsonify([dict(r) for r in rows])
 
     @app.post("/api/boards/<int:board_id>/edges")
@@ -195,7 +195,6 @@ def create_app():
         )
         conn.commit()
         edge = conn.execute("SELECT * FROM edges WHERE id = ?", (cur.lastrowid,)).fetchone()
-        conn.close()
         return jsonify(dict(edge)), 201
 
     @app.delete("/api/edges/<int:edge_id>")
@@ -203,7 +202,6 @@ def create_app():
         conn = get_connection()
         conn.execute("DELETE FROM edges WHERE id = ?", (edge_id,))
         conn.commit()
-        conn.close()
         return "", 204
 
     # ---------- vault (attachments/captures) ----------
@@ -220,7 +218,6 @@ def create_app():
             params.append(node_id)
         sql += " ORDER BY id DESC"
         rows = conn.execute(sql, params).fetchall()
-        conn.close()
         return jsonify([dict(r) for r in rows])
 
     @app.post("/api/boards/<int:board_id>/captures")
@@ -256,14 +253,12 @@ def create_app():
             "SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
             "FROM captures WHERE id = ?", (cap_id,),
         ).fetchone()
-        conn.close()
         return jsonify(dict(cap)), 201
 
     @app.get("/api/captures/<int:capture_id>/file")
     def get_capture_file(capture_id):
         conn = get_connection()
         cap = conn.execute("SELECT * FROM captures WHERE id = ?", (capture_id,)).fetchone()
-        conn.close()
         if not cap:
             return jsonify({"error": "not found"}), 404
         path = db.captures_dir_for(cap["board_id"]) / cap["filename"]
@@ -284,7 +279,6 @@ def create_app():
             "SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
             "FROM captures WHERE id = ?", (capture_id,),
         ).fetchone()
-        conn.close()
         if not cap:
             return jsonify({"error": "not found"}), 404
         return jsonify(dict(cap))
@@ -298,7 +292,6 @@ def create_app():
             path.unlink(missing_ok=True)
             conn.execute("DELETE FROM captures WHERE id = ?", (capture_id,))
             conn.commit()
-        conn.close()
         return "", 204
 
     # ---------- credentials ----------
@@ -312,7 +305,6 @@ def create_app():
     def list_creds(board_id):
         conn = get_connection()
         rows = conn.execute("SELECT * FROM creds WHERE board_id = ? ORDER BY id DESC", (board_id,)).fetchall()
-        conn.close()
         return jsonify([_cred_out(r) for r in rows])
 
     @app.post("/api/boards/<int:board_id>/creds")
@@ -336,7 +328,6 @@ def create_app():
         )
         conn.commit()
         cred = conn.execute("SELECT * FROM creds WHERE id = ?", (cur.lastrowid,)).fetchone()
-        conn.close()
         return jsonify(_cred_out(cred)), 201
 
     @app.patch("/api/creds/<int:cred_id>")
@@ -354,7 +345,6 @@ def create_app():
             conn.execute(f"UPDATE creds SET {set_clause} WHERE id = ?", (*fields.values(), cred_id))
             conn.commit()
         cred = conn.execute("SELECT * FROM creds WHERE id = ?", (cred_id,)).fetchone()
-        conn.close()
         if not cred:
             return jsonify({"error": "not found"}), 404
         return jsonify(_cred_out(cred))
@@ -363,7 +353,6 @@ def create_app():
     def reveal_cred(cred_id):
         conn = get_connection()
         cred = conn.execute("SELECT secret FROM creds WHERE id = ?", (cred_id,)).fetchone()
-        conn.close()
         if not cred:
             return jsonify({"error": "not found"}), 404
         return jsonify({"secret": crypto.decrypt(cred["secret"])})
@@ -373,7 +362,6 @@ def create_app():
         conn = get_connection()
         conn.execute("DELETE FROM creds WHERE id = ?", (cred_id,))
         conn.commit()
-        conn.close()
         return "", 204
 
     # ---------- findings ----------
@@ -386,7 +374,6 @@ def create_app():
         rows = conn.execute(
             f"SELECT * FROM findings WHERE board_id = ? ORDER BY {_SEVERITY_ORDER}, id DESC", (board_id,),
         ).fetchall()
-        conn.close()
         return jsonify([dict(r) for r in rows])
 
     @app.post("/api/boards/<int:board_id>/findings")
@@ -413,7 +400,6 @@ def create_app():
         )
         conn.commit()
         finding = conn.execute("SELECT * FROM findings WHERE id = ?", (cur.lastrowid,)).fetchone()
-        conn.close()
         return jsonify(dict(finding)), 201
 
     @app.patch("/api/findings/<int:finding_id>")
@@ -433,7 +419,6 @@ def create_app():
             )
             conn.commit()
         finding = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
-        conn.close()
         if not finding:
             return jsonify({"error": "not found"}), 404
         return jsonify(dict(finding))
@@ -443,7 +428,6 @@ def create_app():
         conn = get_connection()
         conn.execute("DELETE FROM findings WHERE id = ?", (finding_id,))
         conn.commit()
-        conn.close()
         return "", 204
 
     # ---------- reports (docs) ----------
@@ -455,7 +439,6 @@ def create_app():
             "SELECT id, board_id, title, LENGTH(body) AS size, created_at, updated_at "
             "FROM docs WHERE board_id = ? ORDER BY updated_at DESC", (board_id,),
         ).fetchall()
-        conn.close()
         return jsonify([dict(r) for r in rows])
 
     @app.post("/api/boards/<int:board_id>/docs")
@@ -468,14 +451,12 @@ def create_app():
         )
         conn.commit()
         doc = conn.execute("SELECT * FROM docs WHERE id = ?", (cur.lastrowid,)).fetchone()
-        conn.close()
         return jsonify(dict(doc)), 201
 
     @app.get("/api/docs/<int:doc_id>")
     def get_doc(doc_id):
         conn = get_connection()
         doc = conn.execute("SELECT * FROM docs WHERE id = ?", (doc_id,)).fetchone()
-        conn.close()
         if not doc:
             return jsonify({"error": "not found"}), 404
         return jsonify(dict(doc))
@@ -493,7 +474,6 @@ def create_app():
             )
             conn.commit()
         doc = conn.execute("SELECT * FROM docs WHERE id = ?", (doc_id,)).fetchone()
-        conn.close()
         if not doc:
             return jsonify({"error": "not found"}), 404
         return jsonify(dict(doc))
@@ -503,14 +483,12 @@ def create_app():
         conn = get_connection()
         conn.execute("DELETE FROM docs WHERE id = ?", (doc_id,))
         conn.commit()
-        conn.close()
         return "", 204
 
     @app.get("/api/docs/<int:doc_id>/export.md")
     def export_doc_md(doc_id):
         conn = get_connection()
         doc = conn.execute("SELECT * FROM docs WHERE id = ?", (doc_id,)).fetchone()
-        conn.close()
         if not doc:
             return jsonify({"error": "not found"}), 404
         body = (doc["body"] or "").encode("utf-8")
@@ -613,7 +591,6 @@ def create_app():
         _tally("captures")
         _tally("creds")
         _tally("findings")
-        conn.close()
         return jsonify(counts)
 
     # ---------- search ----------
@@ -628,7 +605,6 @@ def create_app():
                ORDER BY id""",
             (board_id, q, q, q),
         ).fetchall()
-        conn.close()
         return jsonify([dict(r) for r in rows])
 
     return app

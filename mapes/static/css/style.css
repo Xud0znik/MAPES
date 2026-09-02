@@ -325,18 +325,23 @@ button:disabled { opacity: .4; cursor: default; }
 .node {
   position: absolute;
   width: 190px;
-  background: linear-gradient(165deg, var(--panel-2), var(--panel-3));
-  border: 1px solid var(--border);
-  border-top: 3px solid var(--node-color, var(--accent));
-  border-radius: 16px;
+  background:
+    linear-gradient(165deg, var(--panel-2), var(--panel-3)) padding-box,
+    linear-gradient(135deg, var(--node-color, var(--accent)), rgba(255,255,255,.08) 65%) border-box;
+  border: 1.5px solid transparent;
+  border-radius: 6px 22px 6px 22px;
   padding: 12px 14px 10px 16px;
   cursor: grab;
-  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  box-shadow: 0 4px 14px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.02);
   user-select: none;
-  transition: box-shadow .15s ease, transform .15s ease;
+  transition: box-shadow .15s ease, transform .15s ease, border-radius .15s ease;
 }
-.node:hover { box-shadow: 0 10px 26px rgba(0,0,0,.55); transform: translateY(-2px); }
-.node.selected { outline: 2px solid var(--accent); outline-offset: 2px; }
+.node:hover {
+  box-shadow: 0 10px 26px rgba(0,0,0,.55), 0 0 0 1px var(--node-color, var(--accent));
+  transform: translateY(-2px);
+  border-radius: 10px 26px 10px 26px;
+}
+.node.selected { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 10px 26px 10px 26px; }
 
 .node-icon-badge {
   position: absolute;

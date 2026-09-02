@@ -361,6 +361,7 @@ function renderEdges() {
     const ay = parseFloat(a.style.top) + a.offsetHeight / 2;
     const bx = parseFloat(b.style.left) + b.offsetWidth / 2;
     const by = parseFloat(b.style.top) + b.offsetHeight / 2;
+    const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
     line.setAttribute("x1", ax);
     line.setAttribute("y1", ay);
@@ -369,9 +370,29 @@ function renderEdges() {
     line.setAttribute("stroke", "#4f8cff");
     line.setAttribute("stroke-width", "2");
     line.setAttribute("opacity", "0.6");
-    line.style.pointerEvents = "stroke";
-    line.style.cursor = "pointer";
-    line.addEventListener("click", async () => {
+    line.style.pointerEvents = "none";
+    // Invisible, much fatter line on top - the actual click/hover target, since
+    // hitting a 2px-wide diagonal line exactly with the mouse is unreasonably hard.
+    const hit = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    hit.setAttribute("x1", ax);
+    hit.setAttribute("y1", ay);
+    hit.setAttribute("x2", bx);
+    hit.setAttribute("y2", by);
+    hit.setAttribute("stroke", "transparent");
+    hit.setAttribute("stroke-width", "18");
+    hit.style.pointerEvents = "stroke";
+    hit.style.cursor = "pointer";
+    hit.addEventListener("mouseenter", () => {
+      line.setAttribute("stroke", "#ff5f6d");
+      line.setAttribute("stroke-width", "3");
+      line.setAttribute("opacity", "0.95");
+    });
+    hit.addEventListener("mouseleave", () => {
+      line.setAttribute("stroke", "#4f8cff");
+      line.setAttribute("stroke-width", "2");
+      line.setAttribute("opacity", "0.6");
+    });
+    hit.addEventListener("click", async () => {
       if (confirm("Delete this connection?")) {
         await api(`/api/edges/${edge.id}`, { method: "DELETE" });
         state.edges = state.edges.filter((x) => x.id !== edge.id);
@@ -394,7 +415,9 @@ function renderEdges() {
         });
       }
     });
-    edgesLayer.appendChild(line);
+    group.appendChild(line);
+    group.appendChild(hit);
+    edgesLayer.appendChild(group);
   });
 }
 

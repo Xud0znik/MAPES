@@ -99,7 +99,7 @@ def create_app():
     @app.post("/api/boards/<int:board_id>/nodes")
     def create_node(board_id):
         data = request.get_json(force=True) or {}
-        title = (data.get("title") or "Без названия").strip()
+        title = (data.get("title") or "Untitled").strip()
         conn = get_connection()
         cur = conn.execute(
             """INSERT INTO nodes (board_id, type, title, content, tags, color, x, y)
@@ -215,9 +215,9 @@ def create_app():
         try:
             blob = base64.b64decode(raw, validate=False)
         except (binascii.Error, ValueError):
-            return jsonify({"error": "Некорректные данные файла"}), 400
+            return jsonify({"error": "Invalid file data"}), 400
         if not blob:
-            return jsonify({"error": "Пустой файл"}), 400
+            return jsonify({"error": "Empty file"}), 400
 
         orig_name = (data.get("orig_name") or "file").strip()
         mime = data.get("mime") or mimetypes.guess_type(orig_name)[0] or "application/octet-stream"
@@ -251,7 +251,7 @@ def create_app():
             return jsonify({"error": "not found"}), 404
         path = db.captures_dir_for(cap["board_id"]) / cap["filename"]
         if not path.is_file():
-            return jsonify({"error": "Файл отсутствует на диске"}), 404
+            return jsonify({"error": "File missing on disk"}), 404
         return Response(path.read_bytes(), mimetype=cap["mime"] or "application/octet-stream")
 
     @app.patch("/api/captures/<int:capture_id>")
@@ -375,7 +375,7 @@ def create_app():
     @app.post("/api/boards/<int:board_id>/findings")
     def create_finding(board_id):
         data = request.get_json(force=True) or {}
-        title = (data.get("title") or "Без названия").strip()
+        title = (data.get("title") or "Untitled").strip()
         conn = get_connection()
         cur = conn.execute(
             """INSERT INTO findings (board_id, node_id, title, description, impact, poc,
@@ -447,7 +447,7 @@ def create_app():
         conn = get_connection()
         cur = conn.execute(
             "INSERT INTO docs (board_id, title, body) VALUES (?, ?, ?)",
-            (board_id, (data.get("title") or "Отчёт").strip(), data.get("body", "")),
+            (board_id, (data.get("title") or "Report").strip(), data.get("body", "")),
         )
         conn.commit()
         doc = conn.execute("SELECT * FROM docs WHERE id = ?", (cur.lastrowid,)).fetchone()
@@ -519,14 +519,14 @@ def create_app():
         data = request.get_json(force=True) or {}
         raw = (data.get("path") or "").strip()
         if not raw:
-            return jsonify({"error": "Путь не указан"}), 400
+            return jsonify({"error": "Path not specified"}), 400
 
         target = Path(raw).expanduser()
         is_db_file = target.suffix.lower() == ".db"
         try:
             (target.parent if is_db_file else target).mkdir(parents=True, exist_ok=True)
         except OSError as exc:
-            return jsonify({"error": f"Не удалось открыть путь: {exc}"}), 400
+            return jsonify({"error": f"Could not open path: {exc}"}), 400
 
         existed = target.exists() if is_db_file else (target / "mapes.db").exists()
 
@@ -542,11 +542,11 @@ def create_app():
     @app.post("/api/system/save-as")
     def save_as():
         """Copy the current live database to a new file the user picks, and
-        remember it so plain "Сохранить" writes there again."""
+        remember it so plain "Save" writes there again."""
         data = request.get_json(force=True) or {}
         raw = (data.get("path") or "").strip()
         if not raw:
-            return jsonify({"error": "Путь не указан"}), 400
+            return jsonify({"error": "Path not specified"}), 400
 
         target = Path(raw).expanduser()
         if target.suffix.lower() != ".db":
@@ -555,7 +555,7 @@ def create_app():
         try:
             db.backup_to(target)
         except OSError as exc:
-            return jsonify({"error": f"Не удалось сохранить: {exc}"}), 400
+            return jsonify({"error": f"Could not save: {exc}"}), 400
 
         cfg = load_config()
         cfg["linked_path"] = str(target)
@@ -565,15 +565,15 @@ def create_app():
 
     @app.post("/api/system/save")
     def save_now():
-        """Re-save to the location previously chosen via "Сохранить как"."""
+        """Re-save to the location previously chosen via "Save As"."""
         cfg = load_config()
         linked = cfg.get("linked_path")
         if not linked:
-            return jsonify({"error": 'Сначала выбери файл через "Сохранить как"'}), 400
+            return jsonify({"error": 'First pick a file via "Save As"'}), 400
         try:
             db.backup_to(linked)
         except OSError as exc:
-            return jsonify({"error": f"Не удалось сохранить: {exc}"}), 400
+            return jsonify({"error": f"Could not save: {exc}"}), 400
         return jsonify({"path": linked})
 
     # ---------- search ----------

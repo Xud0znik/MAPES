@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS findings (
 CREATE TABLE IF NOT EXISTS docs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
-    title TEXT DEFAULT 'Отчёт',
+    title TEXT DEFAULT 'Report',
     body TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
@@ -122,7 +122,7 @@ def get_connection():
 
 def captures_dir_for(board_id):
     """Where uploaded vault files for a board live on disk, next to the
-    live database (NOT copied by "Сохранить как" - only the .db is)."""
+    live database (NOT copied by "Save As" - only the .db is)."""
     d = DATA_DIR / "captures" / str(board_id)
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -131,7 +131,7 @@ def captures_dir_for(board_id):
 def backup_to(dest_path):
     """Safely copy the current live database to dest_path using SQLite's
     online backup API (consistent even while the app is being used), for
-    the "Сохранить как" / "Сохранить" actions."""
+    the "Save As" / "Save" actions."""
     dest = Path(dest_path).expanduser()
     dest.parent.mkdir(parents=True, exist_ok=True)
     src_conn = sqlite3.connect(DB_PATH)
@@ -153,7 +153,7 @@ def init_db():
         if row["c"] == 0:
             conn.execute(
                 "INSERT INTO boards (name, description) VALUES (?, ?)",
-                ("Моя карта", "Первая карта - добавляй сюда что угодно"),
+                ("My board", "Your first board - put anything on it"),
             )
             conn.commit()
     finally:

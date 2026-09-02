@@ -77,7 +77,7 @@ async function loadBoard(boardId) {
 }
 
 $("#new-board-btn").onclick = async () => {
-  const name = prompt("Название новой карты:");
+  const name = prompt("New board name:");
   if (!name) return;
   const board = await api("/api/boards", {
     method: "POST",
@@ -91,7 +91,7 @@ $("#new-board-btn").onclick = async () => {
 
 $("#delete-board-btn").onclick = async () => {
   if (!state.currentBoardId) return;
-  if (!confirm("Удалить эту карту вместе со всеми узлами?")) return;
+  if (!confirm("Delete this board and all its nodes?")) return;
   await api(`/api/boards/${state.currentBoardId}`, { method: "DELETE" });
   state.boards = state.boards.filter((b) => b.id !== state.currentBoardId);
   state.currentBoardId = state.boards.length ? state.boards[0].id : null;
@@ -258,7 +258,7 @@ function renderEdges() {
     line.style.pointerEvents = "stroke";
     line.style.cursor = "pointer";
     line.addEventListener("click", async () => {
-      if (confirm("Удалить связь?")) {
+      if (confirm("Delete this connection?")) {
         await api(`/api/edges/${edge.id}`, { method: "DELETE" });
         state.edges = state.edges.filter((x) => x.id !== edge.id);
         renderEdges();
@@ -328,7 +328,7 @@ contextMenu.addEventListener("click", async (e) => {
   if (!action || !contextNode) return;
   e.stopPropagation();
   if (action === "delete") {
-    if (confirm(`Удалить узел «${contextNode.title}»?`)) {
+    if (confirm(`Delete node "${contextNode.title}"?`)) {
       await api(`/api/nodes/${contextNode.id}`, { method: "DELETE" });
       state.nodes = state.nodes.filter((n) => n.id !== contextNode.id);
       state.edges = state.edges.filter(
@@ -340,7 +340,7 @@ contextMenu.addEventListener("click", async (e) => {
     const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
       method: "POST",
       body: JSON.stringify({
-        title: `${contextNode.title} (копия)`,
+        title: `${contextNode.title} (copy)`,
         type: contextNode.type,
         color: contextNode.color,
         tags: contextNode.tags,
@@ -359,7 +359,7 @@ contextMenu.addEventListener("click", async (e) => {
 
 function openNodeModal(node, defaults = {}) {
   state.editingNodeId = node ? node.id : null;
-  $("#modal-title").textContent = node ? "Редактировать узел" : "Новый узел";
+  $("#modal-title").textContent = node ? "Edit node" : "New node";
   $("#node-title").value = node ? node.title : "";
   $("#node-type").value = node ? node.type : "note";
   $("#node-color").value = node ? node.color : "#4f8cff";
@@ -404,7 +404,7 @@ $("#node-cancel").onclick = () => {
 
 $("#node-save").onclick = async () => {
   const payload = {
-    title: $("#node-title").value.trim() || "Без названия",
+    title: $("#node-title").value.trim() || "Untitled",
     type: $("#node-type").value,
     color: $("#node-color").value,
     tags: $("#node-tags").value.trim(),
@@ -432,7 +432,7 @@ $("#node-save").onclick = async () => {
 
 $("#node-delete").onclick = async () => {
   if (!state.editingNodeId) return;
-  if (!confirm("Удалить узел вместе со связями?")) return;
+  if (!confirm("Delete this node and its connections?")) return;
   await api(`/api/nodes/${state.editingNodeId}`, { method: "DELETE" });
   state.nodes = state.nodes.filter((n) => n.id !== state.editingNodeId);
   state.edges = state.edges.filter(
@@ -520,11 +520,11 @@ $("#import-file").addEventListener("change", async (e) => {
   try {
     data = JSON.parse(await file.text());
   } catch (err) {
-    alert("Не удалось прочитать файл: некорректный JSON");
+    alert("Could not read the file: invalid JSON");
     return;
   }
   if (!Array.isArray(data.nodes)) {
-    alert("Файл не похож на экспорт карты MAPES");
+    alert("This file doesn't look like a MAPES board export");
     return;
   }
   const createdIds = [];
@@ -566,7 +566,7 @@ async function refreshFileStatus() {
   $("#file-path").textContent = info.path;
   if (info.linked_path) {
     $("#file-save-btn").disabled = false;
-    setFileStatus(`Связано с: ${info.linked_path}`);
+    setFileStatus(`Linked to: ${info.linked_path}`);
   } else {
     $("#file-save-btn").disabled = true;
   }
@@ -581,7 +581,7 @@ $("#file-open-btn").onclick = async () => {
   if (hasNativeApi()) {
     path = await window.pywebview.api.pick_open_file();
   } else {
-    path = prompt("Путь к папке или .db файлу для открытия:");
+    path = prompt("Path to a folder or .db file to open:");
   }
   if (!path) return;
   try {
@@ -589,12 +589,12 @@ $("#file-open-btn").onclick = async () => {
       method: "POST",
       body: JSON.stringify({ path }),
     });
-    setFileStatus(res.existed ? "Открыта существующая карта" : "Создана новая карта");
+    setFileStatus(res.existed ? "Opened existing board" : "Created new board");
     state.currentBoardId = null;
     await loadBoards();
     await refreshFileStatus();
   } catch (e) {
-    alert(`Ошибка: ${e.message}`);
+    alert(`Error: ${e.message}`);
   }
 };
 
@@ -603,7 +603,7 @@ $("#file-save-as-btn").onclick = async () => {
   if (hasNativeApi()) {
     path = await window.pywebview.api.pick_save_as_file();
   } else {
-    path = prompt("Сохранить карту как (путь к .db файлу):");
+    path = prompt("Save board as (path to a .db file):");
   }
   if (!path) return;
   try {
@@ -611,20 +611,20 @@ $("#file-save-as-btn").onclick = async () => {
       method: "POST",
       body: JSON.stringify({ path }),
     });
-    setFileStatus(`Сохранено: ${res.path}`);
+    setFileStatus(`Saved: ${res.path}`);
     $("#file-save-btn").disabled = false;
   } catch (e) {
-    alert(`Ошибка: ${e.message}`);
+    alert(`Error: ${e.message}`);
   }
 };
 
 $("#file-save-btn").onclick = async () => {
   try {
     const res = await api("/api/system/save", { method: "POST" });
-    const now = new Date().toLocaleTimeString("ru-RU");
-    setFileStatus(`Сохранено в ${now}`);
+    const now = new Date().toLocaleTimeString("en-US");
+    setFileStatus(`Saved at ${now}`);
   } catch (e) {
-    alert(`Ошибка: ${e.message}`);
+    alert(`Error: ${e.message}`);
   }
 };
 
@@ -653,7 +653,7 @@ async function refreshCurrentView() {
 }
 
 function populateNodeSelect(select, selectedId) {
-  select.innerHTML = '<option value="">— без узла —</option>';
+  select.innerHTML = '<option value="">- no node -</option>';
   state.nodes.forEach((n) => {
     const opt = document.createElement("option");
     opt.value = n.id;
@@ -684,7 +684,7 @@ async function loadVault() {
       <div class="vault-thumb">${isImage ? `<img src="/api/captures/${cap.id}/file" loading="lazy">` : "📄"}</div>
       <div class="vault-card-info">
         <div class="vault-card-name">${escapeHtml(cap.caption || cap.orig_name)}</div>
-        <div class="vault-card-meta">${nodeTitle(cap.node_id) || "без узла"}</div>
+        <div class="vault-card-meta">${nodeTitle(cap.node_id) || "no node"}</div>
       </div>
     `;
     card.onclick = () => openCaptureModal(cap);
@@ -711,7 +711,7 @@ $("#vault-file-input").addEventListener("change", async (e) => {
       });
       await loadVault();
     } catch (err) {
-      alert(`Ошибка загрузки: ${err.message}`);
+      alert(`Upload error: ${err.message}`);
     }
   };
   reader.readAsDataURL(file);
@@ -745,7 +745,7 @@ $("#capture-save").onclick = async () => {
 };
 
 $("#capture-delete").onclick = async () => {
-  if (!confirm("Удалить файл?")) return;
+  if (!confirm("Delete this file?")) return;
   await api(`/api/captures/${editingCaptureId}`, { method: "DELETE" });
   $("#capture-modal").classList.add("hidden");
   await loadVault();
@@ -778,10 +778,10 @@ $("#creds-add-btn").onclick = () => openCredModal(null);
 
 function openCredModal(cred) {
   editingCredId = cred ? cred.id : null;
-  $("#cred-modal-title").textContent = cred ? "Редактировать учётку" : "Новая учётка";
+  $("#cred-modal-title").textContent = cred ? "Edit credential" : "New credential";
   $("#cred-username").value = cred ? cred.username : "";
   $("#cred-secret").value = "";
-  $("#cred-secret").placeholder = cred ? "оставь пустым, чтобы не менять" : "";
+  $("#cred-secret").placeholder = cred ? "leave empty to keep unchanged" : "";
   $("#cred-kind").value = cred ? cred.kind : "password";
   $("#cred-hash-type").value = cred ? cred.hash_type : "";
   $("#cred-service").value = cred ? cred.service : "";
@@ -816,7 +816,7 @@ $("#cred-save").onclick = async () => {
 };
 
 $("#cred-delete").onclick = async () => {
-  if (!editingCredId || !confirm("Удалить учётку?")) return;
+  if (!editingCredId || !confirm("Delete this credential?")) return;
   await api(`/api/creds/${editingCredId}`, { method: "DELETE" });
   $("#cred-modal").classList.add("hidden");
   await loadCreds();
@@ -825,7 +825,7 @@ $("#cred-delete").onclick = async () => {
 // ---------- Findings ----------
 
 let editingFindingId = null;
-const SEVERITY_LABEL = { crit: "Критичная", high: "Высокая", med: "Средняя", low: "Низкая", info: "Инфо" };
+const SEVERITY_LABEL = { crit: "Critical", high: "High", med: "Medium", low: "Low", info: "Info" };
 
 async function loadFindings() {
   const items = await api(`/api/boards/${state.currentBoardId}/findings`);
@@ -849,7 +849,7 @@ $("#findings-add-btn").onclick = () => openFindingModal(null);
 
 function openFindingModal(f) {
   editingFindingId = f ? f.id : null;
-  $("#finding-modal-title").textContent = f ? "Редактировать finding" : "Новый finding";
+  $("#finding-modal-title").textContent = f ? "Edit finding" : "New finding";
   $("#finding-title").value = f ? f.title : "";
   $("#finding-severity").value = f ? f.severity : "info";
   $("#finding-status").value = f ? f.status : "open";
@@ -867,7 +867,7 @@ $("#finding-cancel").onclick = () => $("#finding-modal").classList.add("hidden")
 
 $("#finding-save").onclick = async () => {
   const payload = {
-    title: $("#finding-title").value.trim() || "Без названия",
+    title: $("#finding-title").value.trim() || "Untitled",
     severity: $("#finding-severity").value,
     status: $("#finding-status").value,
     description: $("#finding-description").value,
@@ -887,7 +887,7 @@ $("#finding-save").onclick = async () => {
 };
 
 $("#finding-delete").onclick = async () => {
-  if (!editingFindingId || !confirm("Удалить finding?")) return;
+  if (!editingFindingId || !confirm("Delete this finding?")) return;
   await api(`/api/findings/${editingFindingId}`, { method: "DELETE" });
   $("#finding-modal").classList.add("hidden");
   await loadFindings();
@@ -904,7 +904,7 @@ async function loadDocs() {
   items.forEach((d) => {
     const div = document.createElement("div");
     div.className = "doc-item" + (d.id === currentDocId ? " active" : "");
-    div.innerHTML = `${escapeHtml(d.title)}<div class="doc-item-meta">${d.size} симв.</div>`;
+    div.innerHTML = `${escapeHtml(d.title)}<div class="doc-item-meta">${d.size} chars</div>`;
     div.onclick = () => openDoc(d.id);
     list.appendChild(div);
   });
@@ -940,7 +940,7 @@ async function openDoc(id) {
 $("#doc-add-btn").onclick = async () => {
   const doc = await api(`/api/boards/${state.currentBoardId}/docs`, {
     method: "POST",
-    body: JSON.stringify({ title: "Новый отчёт", body: "" }),
+    body: JSON.stringify({ title: "New report", body: "" }),
   });
   await openDoc(doc.id);
 };
@@ -955,7 +955,7 @@ $("#doc-save-btn").onclick = async () => {
   await api(`/api/docs/${currentDocId}`, {
     method: "PATCH",
     body: JSON.stringify({
-      title: $("#doc-title-input").value.trim() || "Отчёт",
+      title: $("#doc-title-input").value.trim() || "Report",
       body: $("#doc-body-input").value,
     }),
   });
@@ -970,7 +970,7 @@ $("#doc-export-btn").onclick = () => {
 };
 
 $("#doc-delete-btn").onclick = async () => {
-  if (!currentDocId || !confirm("Удалить отчёт?")) return;
+  if (!currentDocId || !confirm("Delete this report?")) return;
   await api(`/api/docs/${currentDocId}`, { method: "DELETE" });
   currentDocId = null;
   setDocEditorEnabled(false);

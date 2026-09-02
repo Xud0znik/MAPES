@@ -2,24 +2,24 @@
 
 ![MAPES](docs/banner.png)
 
-Локальное приложение-карта: храни узлы (заметки, хосты, учётки, ссылки, файлы - что угодно),
-соединяй их связями и организуй по отдельным картам (проектам). Работает полностью локально,
-без интернета - данные сохраняются в SQLite прямо у тебя на диске.
+A local board app: store nodes (notes, hosts, credentials, links, files - anything),
+connect them, and organize them across separate boards (projects). Runs fully locally,
+no internet needed - data is stored in SQLite right on your disk.
 
-Идея похожа на [atlas-audit](https://github.com/Zoyma/atlas-audit), но без привязки к пентесту:
-это универсальный визуальный конструктор карт для чего угодно.
+The idea is similar to [atlas-audit](https://github.com/Zoyma/atlas-audit), but not
+tied to pentesting: it's a general-purpose visual board for anything.
 
-## Запуск
+## Getting started
 
-### Вариант 1 - готовый .exe (Windows, ничего устанавливать не нужно)
+### Option 1 - prebuilt .exe (Windows, nothing to install)
 
-Зайти в [Releases](../../releases) этого репозитория, скачать `MAPES.exe` и запустить.
-Откроется отдельное окно приложения (без браузера и адресной строки). Данные сохранятся
-в папке `data` рядом с `MAPES.exe`.
+Go to [Releases](../../releases) in this repository, download `MAPES.exe`, and run it.
+It opens its own app window (no browser, no address bar). Data is saved in a `data`
+folder next to `MAPES.exe`.
 
-### Вариант 2 - из исходников (Windows/macOS/Linux)
+### Option 2 - from source (Windows/macOS/Linux)
 
-Нужен Python 3.9+.
+Requires Python 3.9+.
 
 ```bash
 git clone https://github.com/xud0znik/mapes.git
@@ -28,99 +28,105 @@ pip install -r requirements.txt
 python mapes.py
 ```
 
-Приложение поднимет локальный сервер на `http://127.0.0.1:5057` и откроет собственное окно
-(через pywebview). Если pywebview не установился (например, на Linux без нужных системных
-библиотек - GTK/Qt), приложение автоматически откроется как обычная вкладка в браузере.
-Никуда в интернет ничего не отправляется - сервер слушает только `127.0.0.1`.
+The app starts a local server on `http://127.0.0.1:5057` and opens its own window
+(via pywebview). If pywebview fails to load (e.g. on Linux without the required
+system libraries - GTK/Qt), the app automatically falls back to a regular browser
+tab. Nothing is ever sent over the internet - the server only listens on `127.0.0.1`.
 
-### Сборка .exe самостоятельно
+### Building the .exe yourself
 
 ```bash
 pip install -r requirements.txt pyinstaller
 pyinstaller packaging/mapes.spec
 ```
 
-Готовый файл появится в `dist/MAPES.exe`. Также есть GitHub Actions workflow
-(`.github/workflows/build-exe.yml`), который сам собирает `MAPES.exe` на `windows-latest`
-и прикладывает его к GitHub Release при публикации релиза (или запускается вручную).
+The built file appears at `dist/MAPES.exe`. There's also a GitHub Actions workflow
+(`.github/workflows/build-exe.yml`) that builds `MAPES.exe` on `windows-latest` and
+attaches it to a GitHub Release when one is published (or can be run manually).
 
-## Где хранятся данные
+## Where data is stored
 
-MAPES ничего не спрашивает при запуске - как и раньше, тихо использует папку `data` рядом с
-приложением (там появляется `mapes.db`, SQLite). Открыть другую базу или сохранить копию карты
-в выбранное место можно в любой момент прямо в интерфейсе, в разделе **"Файл"** сайдбара:
+MAPES doesn't ask anything on startup - as always, it quietly uses the `data` folder
+next to the app (that's where `mapes.db`, a SQLite file, lives). You can open a
+different database or save a copy of the board somewhere else at any time, right in
+the UI, in the sidebar's **"File"** section:
 
-- **Открыть** - переключить приложение на существующий (или новый) `.db` файл/папку. Все карты,
-  узлы и связи оттуда сразу подхватываются.
-- **Сохранить как...** - выбрать файл назначения и сохранить туда копию текущей карты
-  (безопасно, через встроенный SQLite backup, без риска повредить файл). Путь запоминается.
-- **Сохранить** - появляется активной после первого "Сохранить как"; пересохраняет карту в тот
-  же запомненный файл одним кликом, без повторного выбора пути.
+- **Open** - switch the app to an existing (or new) `.db` file/folder. All boards,
+  nodes, and connections in it are loaded right away.
+- **Save As...** - pick a destination file and save a copy of the current board there
+  (safely, via SQLite's built-in backup API, no risk of corrupting the file). The path
+  is remembered.
+- **Save** - becomes active after the first "Save As"; re-saves the board to that same
+  remembered file with one click, no need to pick the path again.
 
-В собранном `.exe` "Открыть"/"Сохранить как" открывают нативный диалог выбора файла
-(через мост `window.pywebview.api`). В браузерном режиме (когда pywebview недоступен) вместо
-диалога появится текстовый запрос пути.
+In the built `.exe`, "Open"/"Save As" open a native file picker (via the
+`window.pywebview.api` bridge). In browser mode (when pywebview isn't available), a
+text prompt for the path appears instead.
 
-Также можно задать рабочую папку напрямую через переменную окружения `MAPES_DATA_DIR` -
-удобно для автозапуска или для хранения данных в папке синхронизации (Google Drive, Dropbox
-и т.п.). Принимает как папку, так и прямой путь к `.db` файлу:
+You can also set the working folder directly via the `MAPES_DATA_DIR` environment
+variable - handy for scripted startup or for keeping data in a synced folder (Google
+Drive, Dropbox, etc). It accepts either a folder or a direct path to a `.db` file:
 
 ```bash
-MAPES_DATA_DIR="/путь/к/папке-или-файлу.db" python mapes.py
+MAPES_DATA_DIR="/path/to/folder-or-file.db" python mapes.py
 ```
 
-Папка `data` не коммитится в git (см. `.gitignore`). Для бэкапа можно просто скопировать файл
-`mapes.db`, либо воспользоваться "Сохранить как" прямо в приложении.
+The `data` folder isn't committed to git (see `.gitignore`). For a backup, just copy
+the `mapes.db` file, or use "Save As" right in the app.
 
-## Возможности
+## Features
 
-**Доска** (как и раньше):
-- Несколько карт (боардов), каждая - отдельное пространство узлов
-- Узлы разных типов: заметка, хост/сервер, учётка/пароль, ссылка, файл/путь, другое
-- Свободное перетаскивание узлов по холсту, зум (Ctrl/Alt + колесо), позиция сохраняется
-- Связи между узлами (кнопка «Связать узлы» → клик по двум узлам)
-- Теги и цвет узла, правый клик - дублировать/удалить
-- Поиск по названию/содержимому/тегам внутри карты
-- Экспорт/импорт карты в JSON
+**Board** (as before):
+- Multiple boards, each its own independent space of nodes
+- Different node types: note, host/server, account/password, link, file/path, other
+- Freely drag nodes around the canvas, zoom (Ctrl/Alt + scroll), position is saved
+- Connections between nodes ("Connect nodes" button → click two nodes)
+- Tags and node color, right-click to duplicate/delete
+- Search by title/content/tags within a board
+- Export/import a board as JSON
 
-Плюс четыре раздела сверху доски (по функциям по духу как в
-[atlas-audit](https://github.com/Zoyma/atlas-audit), адаптировано под общую, не только
-пентест-специфичную модель MAPES):
+Plus four sections on top of the board (functionally in the spirit of
+[atlas-audit](https://github.com/Zoyma/atlas-audit), adapted to MAPES's general-purpose,
+not just pentest-specific, model):
 
-- **🖼 Vault** - хранилище файлов/скриншотов. Загружаешь файл, можешь привязать к узлу,
-  подписать, тегировать. Файлы лежат на диске рядом с базой (`data/captures/<id-карты>/`) -
-  не копируются вместе с базой через "Сохранить как", это только .db.
-- **🔑 Credentials** - учётки/пароли/хэши/ключи, привязанные к узлам. Секрет шифруется на диске
-  (ChaCha20-Poly1305, ключ - отдельный файл `secret.key` рядом с приложением, не в git). Это
-  защита от случайной утечки самого файла базы, а не полноценный сейф с мастер-паролем - в
-  MAPES нет логина по задумке (см. "Дальше" ниже).
-- **⚑ Findings** - список находок/проблем с severity (crit/high/med/low/info) и статусом
-  (открыт/исправлен/принят риск), привязка к узлу, описание/impact/PoC/рекомендации/ссылки.
-- **▤ Reports** - markdown-заметки/отчёты с live-превью (собственный лёгкий рендерер: заголовки,
-  списки, цитаты, код, **жирный**/*курсив*, ссылки) и экспортом в `.md`.
+- **🖼 Vault** - file/screenshot storage. Upload a file, optionally link it to a node,
+  caption it, tag it. Files live on disk next to the database
+  (`data/captures/<board-id>/`) - not copied along with the database via "Save As",
+  which only copies the .db.
+- **🔑 Credentials** - accounts/passwords/hashes/keys linked to nodes. The secret is
+  encrypted at rest (ChaCha20-Poly1305, with the key in a separate `secret.key` file
+  next to the app, not in git). This protects against the database file itself
+  leaking accidentally, not a full master-password vault - MAPES has no login by
+  design (see "What's next" below).
+- **⚑ Findings** - a list of findings/issues with severity (crit/high/med/low/info)
+  and status (open/fixed/accepted risk), linked to a node, with
+  description/impact/PoC/remediation/references.
+- **▤ Reports** - markdown notes/reports with a live preview (a small built-in
+  renderer: headings, lists, quotes, code, **bold**/*italic*, links) and export to
+  `.md`.
 
-## Структура проекта
+## Project structure
 
 ```
-mapes.py               точка входа: поднимает сервер и открывает окно (pywebview) / браузер
+mapes.py               entry point: starts the server and opens the window (pywebview) / browser
 mapes/
-  app.py                Flask-приложение и REST API
-  db.py                 SQLite: схема и подключение
-  crypto.py             шифрование секретов в Credentials (ChaCha20-Poly1305)
-  paths.py              пути к данным и ресурсам (учитывает запуск из .exe)
-  templates/index.html  разметка страницы
-  static/css/style.css  стили
-  static/js/app.js      логика холста, вкладок, модалок, markdown-превью
-packaging/mapes.spec    конфиг PyInstaller для сборки .exe
-.github/workflows/      автосборка MAPES.exe на GitHub Actions
-data/                   создаётся при запуске: mapes.db + captures/ (не в git)
+  app.py                Flask app and REST API
+  db.py                 SQLite: schema and connection
+  crypto.py             secret encryption for Credentials (ChaCha20-Poly1305)
+  paths.py              paths to data and bundled resources (works from a frozen .exe too)
+  templates/index.html  page markup
+  static/css/style.css  styles
+  static/js/app.js      canvas, tabs, modals, markdown preview logic
+packaging/mapes.spec    PyInstaller config for building the .exe
+.github/workflows/      auto-builds MAPES.exe on GitHub Actions
+data/                   created at runtime: mapes.db + captures/ (not in git)
 ```
 
-## Дальше
+## What's next
 
-Не портировано из Atlas сознательно (можно добавить по запросу):
-- логин/пароль и сессии - противоречит идее "ничего не спрашивать при запуске"
-- отдельные типы Host/Service (в MAPES это просто узлы с типом "host")
-- матрица credential×node, CVSS-калькулятор, экспорт отчёта в PDF, снипсеты для markdown-редактора
+Deliberately not ported from Atlas (can be added on request):
+- login/password and sessions - conflicts with the "never ask anything on startup" idea
+- separate Host/Service types (in MAPES these are just nodes with type "host")
+- credential×node matrix, CVSS calculator, PDF report export, markdown-editor snippets
 
-Дорабатывается дальше по запросу.
+Keeps evolving on request.

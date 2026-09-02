@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""MAPES - локальная карта для хранения чего угодно.
+"""MAPES - a local board for storing anything.
 
-Запуск из исходников:  python mapes.py
-Или готовый MAPES.exe - двойной клик.
+Run from source:  python mapes.py
+Or the built MAPES.exe - just double-click it.
 
-Ничего не спрашивает при запуске - как и раньше, тихо использует папку
-"data" рядом с приложением (или MAPES_DATA_DIR, если задана). Открыть
-другую существующую базу, или сохранить копию карты в выбранное место,
-можно в любой момент прямо в интерфейсе (раздел "Файл" в сайдбаре).
+Doesn't ask anything on startup - as before, it quietly uses the "data"
+folder next to the app (or MAPES_DATA_DIR, if set). Opening a different
+existing database, or saving a copy of the board somewhere else, can be
+done at any time right in the UI (the "File" section in the sidebar).
 
-Открывается отдельное окно (pywebview); если pywebview не установлен -
-приложение просто откроется в браузере на localhost.
+Opens its own window (pywebview); if pywebview isn't installed, the app
+just opens in a browser tab on localhost instead.
 """
 import os
 import socket
@@ -58,11 +58,11 @@ def wait_for_server(host, port, timeout=10.0):
 
 
 class Api:
-    """Bridged to the frontend as window.pywebview.api.* so the "Файл"
+    """Bridged to the frontend as window.pywebview.api.* so the "File"
     section's buttons can open native pick dialogs."""
 
     def pick_open_file(self):
-        """For "Открыть..." - pick an existing .db file to switch to."""
+        """For "Open..." - pick an existing .db file to switch to."""
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -71,8 +71,8 @@ class Api:
             root.withdraw()
             root.attributes("-topmost", True)
             chosen = filedialog.askopenfilename(
-                title="Открыть базу данных MAPES (.db)",
-                filetypes=[("SQLite database", "*.db"), ("Все файлы", "*.*")],
+                title="Open MAPES database (.db)",
+                filetypes=[("SQLite database", "*.db"), ("All files", "*.*")],
             )
             root.destroy()
             return chosen or None
@@ -80,7 +80,7 @@ class Api:
             return None
 
     def pick_save_as_file(self):
-        """For "Сохранить как..." - pick a destination .db file."""
+        """For "Save As..." - pick a destination .db file."""
         try:
             import tkinter as tk
             from tkinter import filedialog
@@ -89,9 +89,9 @@ class Api:
             root.withdraw()
             root.attributes("-topmost", True)
             chosen = filedialog.asksaveasfilename(
-                title="Сохранить карту как...",
+                title="Save board as...",
                 defaultextension=".db",
-                filetypes=[("SQLite database", "*.db"), ("Все файлы", "*.*")],
+                filetypes=[("SQLite database", "*.db"), ("All files", "*.*")],
                 initialfile="mapes.db",
             )
             root.destroy()
@@ -103,7 +103,7 @@ class Api:
 def main():
     data_dir = resolve_data_dir()
     db.configure(data_dir)
-    print(f"MAPES: данные хранятся в {db.DB_PATH}")
+    print(f"MAPES: data stored in {db.DB_PATH}")
 
     threading.Thread(target=run_server, daemon=True).start()
     url = f"http://{HOST}:{PORT}/"
@@ -111,7 +111,7 @@ def main():
 
     if not open_app_window(url):
         webbrowser.open(url)
-        print(f"MAPES запущен: {url}  (Ctrl+C для остановки)")
+        print(f"MAPES running: {url}  (Ctrl+C to stop)")
         try:
             while True:
                 time.sleep(3600)
@@ -134,7 +134,7 @@ def open_app_window(url):
         webview.start()
         return True
     except Exception as exc:
-        print(f"Не удалось открыть окно приложения (pywebview): {exc}")
+        print(f"Could not open the app window (pywebview): {exc}")
         return False
 
 

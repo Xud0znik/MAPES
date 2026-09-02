@@ -500,6 +500,35 @@ button:disabled { opacity: .4; cursor: default; }
 .node.node-image-card.minimized .node-image-wrap { height: 60px !important; }
 .node.node-image-card.minimized .node-image-resize-handle { display: none; }
 
+/* Task-list node - a small checklist pinned to the board */
+.node.node-tasks-card { width: 210px; cursor: default; }
+.node-tasks-card .node-header { display: flex; align-items: center; gap: 0; cursor: pointer; }
+.node-tasks-card .node-icon-badge { position: static; width: 22px; height: 22px; font-size: 12px; box-shadow: none; margin-right: 6px; flex-shrink: 0; }
+.node-tasks-card .node-type { display: none; }
+.node-tasks-card .node-title { margin: 0; }
+.node-tasklist-items { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.tasklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.tasklist-item input[type="checkbox"] { flex-shrink: 0; margin-top: 2px; accent-color: var(--accent); cursor: pointer; }
+.tasklist-item .task-text { min-width: 0; overflow-wrap: anywhere; }
+.tasklist-item:has(input:checked) .task-text { color: var(--muted); text-decoration: line-through; }
+.node-task-add {
+  margin-top: 8px;
+  width: 100%;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+.node-task-add:focus { outline: none; border-color: var(--accent); }
+
 .node-icon-badge {
   position: absolute;
   top: -14px;
@@ -872,25 +901,48 @@ tr.empty-row td {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 13px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  min-width: 0;
 }
 .doc-preview {
   flex: 1;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 14px 18px;
   font-size: 13px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .doc-preview h1, .doc-preview h2, .doc-preview h3 { margin: .6em 0 .3em; }
-.doc-preview code { background: var(--panel-3); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+.doc-preview code { background: var(--panel-3); padding: 1px 5px; border-radius: 4px; font-size: .9em; overflow-wrap: anywhere; }
 .doc-preview pre { background: var(--panel-3); padding: 10px; border-radius: var(--radius); overflow-x: auto; }
 .doc-preview pre code { background: none; padding: 0; }
 .doc-preview blockquote { border-left: 3px solid var(--border); margin: 0; padding-left: 12px; color: var(--muted); }
-.doc-preview a { color: var(--accent); }
-.doc-preview li.task-item { list-style: none; margin-left: -1.2em; }
-.doc-preview li.task-item label { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
-.doc-preview li.task-item input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); cursor: pointer; }
+.doc-preview a { color: var(--accent); overflow-wrap: anywhere; }
+.doc-preview ul { padding-left: 1.3em; margin: .4em 0; }
+.doc-preview li.task-item {
+  list-style: none;
+  margin-left: -1.3em;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+.doc-preview li.task-item input[type="checkbox"] {
+  flex-shrink: 0;
+  margin-top: 4px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.doc-preview li.task-item .task-text {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
 .reports-actions { display: flex; gap: 8px; }
 .reports-actions button { width: auto; margin-top: 0; }

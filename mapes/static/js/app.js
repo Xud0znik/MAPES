@@ -7,6 +7,7 @@ const state = {
   connectMode: false,
   connectSource: null,
   addNoteMode: false,
+  addTasksMode: false,
   minimizedImageIds: new Set(),
   editingNodeId: null,
   zoom: 1,
@@ -26,6 +27,7 @@ const NODE_ICONS = {
   file: "📄",
   other: "▫",
   image: "🖼",
+  tasks: "☑",
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -244,15 +246,41 @@ canvas.addEventListener("dblclick", async (e) => {
 // again (or Esc) to turn it off.
 $("#add-note-btn").onclick = () => {
   state.addNoteMode = !state.addNoteMode;
+  state.addTasksMode = false;
   $("#add-note-btn").classList.toggle("active", state.addNoteMode);
+  $("#add-tasks-btn").classList.remove("active");
   canvasWrapper.classList.toggle("note-tool-active", state.addNoteMode);
 };
 
+// Same idea as the sticky-note tool, but drops a checklist card: click to
+// arm, click the board to place one, then type the first task and keep
+// adding more right on the card - connects to other nodes like any other.
+$("#add-tasks-btn").onclick = () => {
+  state.addTasksMode = !state.addTasksMode;
+  state.addNoteMode = false;
+  $("#add-tasks-btn").classList.toggle("active", state.addTasksMode);
+  $("#add-note-btn").classList.remove("active");
+  canvasWrapper.classList.toggle("note-tool-active", state.addTasksMode);
+};
+
 canvas.addEventListener("click", async (e) => {
-  if (!state.addNoteMode || e.target !== canvas) return;
+  if (e.target !== canvas) return;
+  if (!state.addNoteMode && !state.addTasksMode) return;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / state.zoom - 95;
   const y = (e.clientY - rect.top) / state.zoom - 20;
+  if (state.addTasksMode) {
+    const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+      method: "POST",
+      body: JSON.stringify({ title: "Tasks", type: "tasks", content: "", x, y }),
+    });
+    state.nodes.push(created);
+    pushHistory(makeCreateNodeAction(created));
+    renderCanvas();
+    const addInput = canvas.querySelector(`.node[data-id="${created.id}"] .node-task-add`);
+    if (addInput) addInput.focus();
+    return;
+  }
   const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
     method: "POST",
     body: JSON.stringify({ title: "Note", type: "note", content: "", x, y }),
@@ -265,9 +293,11 @@ canvas.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && state.addNoteMode) {
+  if (e.key === "Escape" && (state.addNoteMode || state.addTasksMode)) {
     state.addNoteMode = false;
+    state.addTasksMode = false;
     $("#add-note-btn").classList.remove("active");
+    $("#add-tasks-btn").classList.remove("active");
     canvasWrapper.classList.remove("note-tool-active");
   }
 });
@@ -348,9 +378,13 @@ function buildNodeEl(node) {
   el.style.setProperty("--node-color", node.color || "#4f8cff");
   const isNote = node.type === "note";
   const isImage = node.type === "image";
+  const isTasks = node.type === "tasks";
 
   if (isImage) {
     return buildImageNodeEl(el, node);
+  }
+  if (isTasks) {
+    return buildTasksNodeEl(el, node);
   }
 
   el.innerHTML = `
@@ -382,6 +416,85 @@ function buildNodeEl(node) {
     } else {
       openNodeModal(node);
     }
+  });
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, node);
+  });
+  return el;
+}
+
+// Task-list nodes: a small checklist right on the board, connectable to
+// other nodes like any node - lines are stored as plain "- [ ] text" /
+// "- [x] text" in node.content, same syntax as the Reports checklists.
+function parseTaskLines(content) {
+  return (content || "").split("\n").filter((l) => l.trim() !== "");
+}
+
+function buildTasksNodeEl(el, node) {
+  el.classList.add("node-tasks-card");
+  el.innerHTML = `
+    <div class="node-header">
+      <div class="node-icon-badge">${NODE_ICONS.tasks}</div>
+      <div class="node-type">tasks</div>
+      <div class="node-title">${escapeHtml(node.title)}</div>
+    </div>
+    <div class="node-tasklist-items"></div>
+    <input type="text" class="node-task-add" placeholder="+ Add task, Enter">
+  `;
+  makeDraggable(el, node);
+
+  const listEl = el.querySelector(".node-tasklist-items");
+  const renderList = () => {
+    const lines = parseTaskLines(node.content);
+    listEl.innerHTML = lines.map((line, i) => {
+      const m = line.match(/^[-*]\s+\[([ xX])\]\s*(.*)$/);
+      const checked = m ? m[1].toLowerCase() === "x" : false;
+      const text = m ? m[2] : line;
+      return `<div class="tasklist-item"><input type="checkbox" data-idx="${i}"${checked ? " checked" : ""}><span class="task-text">${escapeHtml(text)}</span></div>`;
+    }).join("");
+  };
+  renderList();
+
+  listEl.addEventListener("mousedown", (e) => e.stopPropagation());
+  listEl.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const textEl = e.target.closest(".task-text");
+    const cb = e.target.closest('input[type="checkbox"]') || (textEl && textEl.previousElementSibling);
+    if (!cb) return;
+    if (textEl) cb.checked = !cb.checked;
+    const idx = Number(cb.dataset.idx);
+    const lines = parseTaskLines(node.content);
+    const m = lines[idx].match(/^[-*]\s+\[([ xX])\]\s*(.*)$/);
+    const text = m ? m[2] : lines[idx];
+    lines[idx] = `- [${cb.checked ? "x" : " "}] ${text}`;
+    node.content = lines.join("\n");
+    await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify({ content: node.content }) });
+    await refreshNodeCounts();
+  });
+
+  const addInput = el.querySelector(".node-task-add");
+  addInput.addEventListener("mousedown", (e) => e.stopPropagation());
+  addInput.addEventListener("click", (e) => e.stopPropagation());
+  addInput.addEventListener("keydown", async (e) => {
+    e.stopPropagation();
+    if (e.key !== "Enter") return;
+    const text = addInput.value.trim();
+    if (!text) return;
+    const lines = parseTaskLines(node.content);
+    lines.push(`- [ ] ${text}`);
+    node.content = lines.join("\n");
+    addInput.value = "";
+    await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify({ content: node.content }) });
+    renderList();
+  });
+
+  el.querySelector(".node-header").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el._dragMoved) { el._dragMoved = false; return; }
+    if (state.connectMode) handleConnectClick(node.id, el);
+    else openNodeModal(node);
   });
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -1576,6 +1689,16 @@ function renderDocPreview() {
 // Ticking a checklist box in the preview edits the "[ ]"/"[x]" on that exact
 // source line and re-renders - same as any other manual edit, so it's
 // included next time "Save report" is clicked.
+$("#doc-preview").addEventListener("click", (e) => {
+  const text = e.target.closest(".task-text");
+  if (!text) return;
+  const cb = text.previousElementSibling;
+  if (cb && cb.matches('input[type="checkbox"]')) {
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+});
+
 $("#doc-preview").addEventListener("change", (e) => {
   const cb = e.target.closest('input[type="checkbox"][data-line]');
   if (!cb) return;
@@ -1662,7 +1785,7 @@ function renderMarkdown(src) {
       if (!inList) { html.push("<ul>"); inList = true; }
       const checked = taskItem[1].toLowerCase() === "x";
       html.push(
-        `<li class="task-item"><label><input type="checkbox" data-line="${i}"${checked ? " checked" : ""}> ${inline(taskItem[2])}</label></li>`
+        `<li class="task-item"><input type="checkbox" data-line="${i}"${checked ? " checked" : ""}><span class="task-text">${inline(taskItem[2])}</span></li>`
       );
     } else if (listItem) {
       closeQuote();

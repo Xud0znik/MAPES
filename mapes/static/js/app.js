@@ -706,34 +706,14 @@ function buildTableNodeEl(el, node) {
   const gridEl = document.createElement("table");
   gridEl.className = "node-table-grid";
 
-  // One small × tucked into each cell - invisible until that exact cell is
-  // hovered, then it fades in so a click there deletes that cell's whole
-  // column (every row keeps the same length, so there's no such thing as
-  // removing just one cell without shifting the rest of its row).
   const renderGrid = () => {
     gridEl.innerHTML = grid.map((row, ri) =>
       `<tr>${row.map((cell, ci) =>
-        `<td data-r="${ri}" data-c="${ci}"><div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div>${
-          grid[0].length > 1 ? `<span class="cell-clear-btn" title="Delete column">×</span>` : ""
-        }</td>`
+        `<td data-r="${ri}" data-c="${ci}"><div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div></td>`
       ).join("")}</tr>`
     ).join("");
   };
   renderGrid();
-
-  gridEl.addEventListener("mousedown", (e) => {
-    if (e.target.closest(".cell-clear-btn")) e.preventDefault();
-  });
-  gridEl.addEventListener("click", async (e) => {
-    const clearBtn = e.target.closest(".cell-clear-btn");
-    if (!clearBtn) return;
-    const td = clearBtn.closest("td");
-    const c = Number(td.dataset.c);
-    if (grid[0].length <= 1) return;
-    grid.forEach((row) => row.splice(c, 1));
-    renderGrid();
-    await save();
-  });
 
   el.innerHTML = `
     <div class="node-header">
@@ -744,6 +724,9 @@ function buildTableNodeEl(el, node) {
     <div class="node-table-controls">
       <button type="button" class="table-add-row" title="Add row">+ Row</button>
       <button type="button" class="table-add-col" title="Add column">+ Col</button>
+      <span class="table-controls-sep"></span>
+      <button type="button" class="table-del-row" title="Delete last row">− Row</button>
+      <button type="button" class="table-del-col" title="Delete last column">− Col</button>
     </div>
   `;
   el.querySelector(".node-table-wrap").appendChild(gridEl);
@@ -778,6 +761,22 @@ function buildTableNodeEl(el, node) {
   el.querySelector(".table-add-col").addEventListener("click", async (e) => {
     e.stopPropagation();
     grid.forEach((row) => row.push(""));
+    renderGrid();
+    await save();
+  });
+  el.querySelector(".table-del-row").addEventListener("mousedown", (e) => e.stopPropagation());
+  el.querySelector(".table-del-row").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (grid.length <= 1) return;
+    grid.pop();
+    renderGrid();
+    await save();
+  });
+  el.querySelector(".table-del-col").addEventListener("mousedown", (e) => e.stopPropagation());
+  el.querySelector(".table-del-col").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (grid[0].length <= 1) return;
+    grid.forEach((row) => row.pop());
     renderGrid();
     await save();
   });

@@ -658,35 +658,7 @@ button:disabled { opacity: .4; cursor: default; }
   outline-offset: -2px;
   background: var(--panel-2);
 }
-/* A tiny × tucked into each cell's own corner - invisible until that exact
-   cell is hovered, so it never competes visually with the data, and only
-   ever clears that one cell rather than a whole row or column. */
-.cell-clear-btn {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  font-size: 10px;
-  line-height: 1;
-  color: var(--muted);
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity .12s ease, color .12s ease, background .12s ease;
-  z-index: 2;
-}
-.node-table-grid td:hover .cell-clear-btn {
-  opacity: 1;
-}
-.cell-clear-btn:hover {
-  color: var(--danger);
-  background: var(--danger-dim);
-}
-.node-table-controls { display: flex; gap: 6px; margin-top: 8px; }
+.node-table-controls { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .node-table-controls button {
   width: auto;
   background: var(--panel-3);
@@ -698,6 +670,11 @@ button:disabled { opacity: .4; cursor: default; }
   cursor: pointer;
 }
 .node-table-controls button:hover { color: var(--text); border-color: var(--accent); }
+.table-controls-sep { width: 1px; height: 16px; background: var(--border); flex-shrink: 0; }
+.table-del-row:hover, .table-del-col:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
 
 .node-icon-badge {
   position: absolute;

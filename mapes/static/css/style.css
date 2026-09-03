@@ -633,35 +633,38 @@ button:disabled { opacity: .4; cursor: default; }
   outline-offset: -2px;
   background: var(--panel-2);
 }
-/* A tiny × tucked into the corner of the cell it would delete, shown only
-   on hover - instead of a whole separate row/column of buttons detached
-   from the actual data. */
-.cell-del-col, .cell-del-row {
-  position: absolute;
+/* A slim, borderless cell tacked onto the right end of each row holding a
+   single × - invisible until that row is hovered, so the row's delete
+   control doesn't visually compete with the data itself. */
+.node-table-grid td.row-del-cell {
+  border: none;
+  background: transparent;
+  min-width: 22px;
+  width: 22px;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+}
+.row-del-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 16px;
   height: 16px;
-  line-height: 16px;
   border-radius: 50%;
-  text-align: center;
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 1;
   color: var(--muted);
-  background: var(--panel-2);
-  box-shadow: 0 0 0 1px var(--border);
   cursor: pointer;
   opacity: 0;
   transition: opacity .12s ease, color .12s ease, background .12s ease;
-  z-index: 2;
 }
-.cell-del-col { top: -8px; right: -8px; }
-.cell-del-row { bottom: -8px; right: -8px; }
-.node-table-grid td:hover .cell-del-col,
-.node-table-grid td:hover .cell-del-row {
+.node-table-grid tr:hover .row-del-btn {
   opacity: 1;
 }
-.cell-del-col:hover, .cell-del-row:hover {
+.row-del-btn:hover {
   color: var(--danger);
   background: var(--danger-dim);
-  box-shadow: 0 0 0 1px var(--danger);
 }
 .node-table-controls { display: flex; gap: 6px; margin-top: 8px; }
 .node-table-controls button {

@@ -723,38 +723,28 @@ function buildTableNodeEl(el, node) {
   const gridEl = document.createElement("table");
   gridEl.className = "node-table-grid";
 
-  // Each cell that starts a column (top row) or ends a row (last column)
-  // gets a tiny × badge tucked right into its own corner - shown on hover -
-  // instead of a whole separate row/column of delete buttons detached from
-  // the actual data. Only shown when there's more than one to delete, so
-  // the table can't be emptied out entirely by accident.
+  // One small × per row, tucked in a slim extra cell at the row's right
+  // edge - invisible until that row is hovered, then it fades in so a
+  // click there deletes just that row. No column-delete affordance at
+  // all anymore (that's what "+ Col" removal would be for, if ever added).
   const renderGrid = () => {
     gridEl.innerHTML = grid.map((row, ri) =>
-      `<tr>${row.map((cell, ci) => {
-        const delCol = ri === 0 && grid[0].length > 1
-          ? `<span class="cell-del-col" data-c="${ci}" title="Delete column">×</span>` : "";
-        const delRow = ci === row.length - 1 && grid.length > 1
-          ? `<span class="cell-del-row" data-r="${ri}" title="Delete row">×</span>` : "";
-        return `<td data-r="${ri}" data-c="${ci}">${delCol}${delRow}<div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div></td>`;
-      }).join("")}</tr>`
+      `<tr>${row.map((cell, ci) =>
+        `<td data-r="${ri}" data-c="${ci}"><div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div></td>`
+      ).join("")}<td class="row-del-cell">${
+        grid.length > 1 ? `<span class="row-del-btn" data-r="${ri}" title="Delete row">×</span>` : ""
+      }</td></tr>`
     ).join("");
   };
   renderGrid();
 
   gridEl.addEventListener("mousedown", (e) => {
-    if (e.target.closest(".cell-del-row") || e.target.closest(".cell-del-col")) e.preventDefault();
+    if (e.target.closest(".row-del-btn")) e.preventDefault();
   });
   gridEl.addEventListener("click", async (e) => {
-    const delRow = e.target.closest(".cell-del-row");
-    const delCol = e.target.closest(".cell-del-col");
-    if (delRow && grid.length > 1) {
-      grid.splice(Number(delRow.dataset.r), 1);
-    } else if (delCol && grid[0].length > 1) {
-      const c = Number(delCol.dataset.c);
-      grid.forEach((row) => row.splice(c, 1));
-    } else {
-      return;
-    }
+    const delRow = e.target.closest(".row-del-btn");
+    if (!delRow || grid.length <= 1) return;
+    grid.splice(Number(delRow.dataset.r), 1);
     renderGrid();
     await save();
   });

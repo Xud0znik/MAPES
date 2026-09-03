@@ -723,31 +723,30 @@ function buildTableNodeEl(el, node) {
   const gridEl = document.createElement("table");
   gridEl.className = "node-table-grid";
 
+  // Each cell that starts a column (top row) or ends a row (last column)
+  // gets a tiny × badge tucked right into its own corner - shown on hover -
+  // instead of a whole separate row/column of delete buttons detached from
+  // the actual data. Only shown when there's more than one to delete, so
+  // the table can't be emptied out entirely by accident.
   const renderGrid = () => {
-    const colCount = grid[0].length;
-    // A row of column-delete buttons on top, and a row-delete button at the
-    // end of each row - only shown when there's more than one to delete, so
-    // the table can't be emptied out entirely by accident.
-    const colHeader = colCount > 1
-      ? `<tr class="table-col-controls">${grid[0].map((_, ci) =>
-          `<td class="table-del-col" data-c="${ci}" title="Delete column">×</td>`
-        ).join("")}<td></td></tr>`
-      : "";
-    const rows = grid.map((row, ri) =>
-      `<tr>${row.map((cell, ci) =>
-        `<td contenteditable="true" data-r="${ri}" data-c="${ci}">${escapeHtml(cell)}</td>`
-      ).join("")}${grid.length > 1 ? `<td class="table-del-row" data-r="${ri}" title="Delete row">×</td>` : ""}</tr>`
+    gridEl.innerHTML = grid.map((row, ri) =>
+      `<tr>${row.map((cell, ci) => {
+        const delCol = ri === 0 && grid[0].length > 1
+          ? `<span class="cell-del-col" data-c="${ci}" title="Delete column">×</span>` : "";
+        const delRow = ci === row.length - 1 && grid.length > 1
+          ? `<span class="cell-del-row" data-r="${ri}" title="Delete row">×</span>` : "";
+        return `<td data-r="${ri}" data-c="${ci}">${delCol}${delRow}<div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div></td>`;
+      }).join("")}</tr>`
     ).join("");
-    gridEl.innerHTML = colHeader + rows;
   };
   renderGrid();
 
   gridEl.addEventListener("mousedown", (e) => {
-    if (e.target.closest(".table-del-row") || e.target.closest(".table-del-col")) e.preventDefault();
+    if (e.target.closest(".cell-del-row") || e.target.closest(".cell-del-col")) e.preventDefault();
   });
   gridEl.addEventListener("click", async (e) => {
-    const delRow = e.target.closest(".table-del-row");
-    const delCol = e.target.closest(".table-del-col");
+    const delRow = e.target.closest(".cell-del-row");
+    const delCol = e.target.closest(".cell-del-col");
     if (delRow && grid.length > 1) {
       grid.splice(Number(delRow.dataset.r), 1);
     } else if (delCol && grid[0].length > 1) {
@@ -777,13 +776,13 @@ function buildTableNodeEl(el, node) {
   wrap.addEventListener("mousedown", (e) => e.stopPropagation());
   wrap.addEventListener("click", (e) => e.stopPropagation());
   // blur doesn't bubble, so listen in the capture phase to catch it from
-  // whichever <td> just lost focus after an edit.
+  // whichever cell just lost focus after an edit.
   wrap.addEventListener("blur", (e) => {
-    const td = e.target.closest && e.target.closest("td[contenteditable]");
-    if (!td) return;
+    if (!e.target.classList || !e.target.classList.contains("cell-text")) return;
+    const td = e.target.closest("td");
     const r = Number(td.dataset.r), c = Number(td.dataset.c);
     if (grid[r] && grid[r][c] !== undefined) {
-      grid[r][c] = td.textContent;
+      grid[r][c] = e.target.textContent;
       save();
     }
   }, true);

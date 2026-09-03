@@ -613,47 +613,55 @@ button:disabled { opacity: .4; cursor: default; }
   font-size: 12.5px;
 }
 .node-table-grid td {
+  position: relative;
   border: 1px solid var(--border);
   background: var(--panel-3);
-  padding: 6px 10px;
+  padding: 0;
   min-width: 70px;
-  height: 1.4em;
   max-width: 220px;
-  overflow-wrap: anywhere;
-  cursor: text;
   vertical-align: top;
 }
 .node-table-grid td:hover { background: var(--panel-2); }
-.node-table-grid td:focus {
+.cell-text {
+  padding: 6px 10px;
+  min-height: 1.4em;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.cell-text:focus {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
   background: var(--panel-2);
 }
-/* Column/row delete controls sit in their own thin strip, clearly
-   separate from the data cells instead of looking like stray marks
-   floating in leftover space. */
-.table-col-controls { background: transparent; }
-.table-col-controls td { border: none; padding: 0 0 4px; }
-.node-table-grid td.table-del-row, .node-table-grid td.table-del-col {
-  border: none;
-  min-width: 20px !important;
-  width: 20px;
-  height: 20px;
-  line-height: 20px;
+/* A tiny × tucked into the corner of the cell it would delete, shown only
+   on hover - instead of a whole separate row/column of buttons detached
+   from the actual data. */
+.cell-del-col, .cell-del-row {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
   border-radius: 50%;
   text-align: center;
+  font-size: 10px;
   color: var(--muted);
   background: var(--panel-2);
+  box-shadow: 0 0 0 1px var(--border);
   cursor: pointer;
-  opacity: .55;
-  font-size: 11px;
+  opacity: 0;
   transition: opacity .12s ease, color .12s ease, background .12s ease;
+  z-index: 2;
 }
-.node-table-grid td.table-del-row { padding: 0 0 0 4px; }
-.node-table-grid td.table-del-row:hover, .node-table-grid td.table-del-col:hover {
+.cell-del-col { top: -8px; right: -8px; }
+.cell-del-row { bottom: -8px; right: -8px; }
+.node-table-grid td:hover .cell-del-col,
+.node-table-grid td:hover .cell-del-row {
   opacity: 1;
+}
+.cell-del-col:hover, .cell-del-row:hover {
   color: var(--danger);
   background: var(--danger-dim);
+  box-shadow: 0 0 0 1px var(--danger);
 }
 .node-table-controls { display: flex; gap: 6px; margin-top: 8px; }
 .node-table-controls button {

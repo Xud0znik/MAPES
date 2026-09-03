@@ -1041,6 +1041,13 @@ tr.empty-row td {
   padding: 5px 8px;
   white-space: nowrap;
   color: var(--text);
+  user-select: text;
+  cursor: text;
+}
+.capture-sheet-table ::selection,
+.capture-text-preview ::selection {
+  background: var(--accent);
+  color: #fff;
 }
 .capture-sheet-table tr:first-child td { font-weight: 600; background: var(--panel-2); }
 .sheet-truncated-note { padding: 8px 10px; font-size: 11px; color: var(--muted); background: var(--panel); }

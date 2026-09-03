@@ -376,13 +376,23 @@ def create_app():
         MAX_ROWS, MAX_COLS = 300, 60
         sheets = []
         for ws in wb.worksheets:
+            # iter_rows(max_col=...) always pads every row out to exactly
+            # that many cells, even on a sheet with only 2 real columns -
+            # clamp to the sheet's *actual* used range instead, so the
+            # preview (and anything selected/copied out of it) doesn't
+            # drag along dozens of empty trailing cells.
+            real_rows = ws.max_row or 0
+            real_cols = ws.max_column or 0
+            use_rows = min(real_rows, MAX_ROWS)
+            use_cols = min(real_cols, MAX_COLS)
             rows = []
-            for i, row in enumerate(ws.iter_rows(max_row=MAX_ROWS, max_col=MAX_COLS)):
-                rows.append(["" if c.value is None else str(c.value) for c in row])
+            if use_rows and use_cols:
+                for row in ws.iter_rows(max_row=use_rows, max_col=use_cols):
+                    rows.append(["" if c.value is None else str(c.value) for c in row])
             sheets.append({
                 "name": ws.title,
                 "rows": rows,
-                "truncated": (ws.max_row or 0) > MAX_ROWS or (ws.max_column or 0) > MAX_COLS,
+                "truncated": real_rows > MAX_ROWS or real_cols > MAX_COLS,
             })
         wb.close()
         return jsonify({"sheets": sheets})

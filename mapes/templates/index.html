@@ -55,11 +55,11 @@
 
   <main id="board-area">
     <div id="view-tabs">
-      <button class="view-tab active" data-view="board">◆ Board</button>
-      <button class="view-tab" data-view="vault">🖼 Vault</button>
-      <button class="view-tab" data-view="creds">🔑 Credentials</button>
-      <button class="view-tab" data-view="findings">⚑ Findings</button>
-      <button class="view-tab" data-view="reports">▤ Reports</button>
+      <button class="view-tab active" data-view="board"><img class="tab-icon" src="{{ url_for('static', filename='img/icons/board.png') }}" alt=""> Board</button>
+      <button class="view-tab" data-view="vault"><img class="tab-icon" src="{{ url_for('static', filename='img/icons/vault.png') }}" alt=""> Vault</button>
+      <button class="view-tab" data-view="creds"><img class="tab-icon" src="{{ url_for('static', filename='img/icons/credentials.png') }}" alt=""> Credentials</button>
+      <button class="view-tab" data-view="findings"><img class="tab-icon" src="{{ url_for('static', filename='img/icons/findings.png') }}" alt=""> Findings</button>
+      <button class="view-tab" data-view="reports"><img class="tab-icon" src="{{ url_for('static', filename='img/icons/reports.png') }}" alt=""> Reports</button>
     </div>
 
     <div id="board-view" class="view-panel">
@@ -77,12 +77,12 @@
           <button id="zoom-reset-btn" class="btn-ghost" title="Reset zoom">Reset</button>
         </div>
         <span class="toolbar-sep"></span>
-        <button id="add-note-btn" class="btn-ghost">🗒 Add note</button>
-        <button id="add-tasks-btn" class="btn-ghost">☑ Tasks</button>
-        <button id="add-zone-btn" class="btn-ghost">▭ Zone</button>
-        <button id="add-table-btn" class="btn-ghost">▦ Table</button>
-        <button id="connect-btn" class="btn-ghost">⌁ Connect nodes</button>
-        <button id="delete-board-btn" class="btn-ghost danger">Delete board</button>
+        <button id="add-note-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/note.png') }}" alt=""> Add note</button>
+        <button id="add-tasks-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/task.png') }}" alt=""> Tasks</button>
+        <button id="add-zone-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/zone.png') }}" alt=""> Zone</button>
+        <button id="add-table-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/table.png') }}" alt=""> Table</button>
+        <button id="connect-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/connect.png') }}" alt=""> Connect nodes</button>
+        <button id="delete-board-btn" class="btn-ghost danger"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/delete_board.png') }}" alt=""> Delete board</button>
       </div>
       <div id="canvas-wrapper">
         <div id="canvas-sizer">

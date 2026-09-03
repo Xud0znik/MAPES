@@ -743,7 +743,10 @@ function buildTableNodeEl(el, node) {
     if (!clearBtn) return;
     const td = clearBtn.closest("td");
     const r = Number(td.dataset.r), c = Number(td.dataset.c);
-    if (!grid[r] || grid[r][c] === undefined || grid[r][c] === "") return;
+    if (!grid[r] || grid[r][c] === undefined) return;
+    // Even if the cell still shows unsaved text being typed (its blur/save
+    // never fired), re-rendering from a cleared grid value wipes the DOM
+    // too - so this always actually clears what's on screen.
     grid[r][c] = "";
     renderGrid();
     await save();

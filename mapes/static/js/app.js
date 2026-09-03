@@ -9,6 +9,7 @@ const state = {
   addNoteMode: false,
   addTasksMode: false,
   addZoneMode: false,
+  addTableMode: false,
   minimizedImageIds: new Set(),
   editingNodeId: null,
   zoom: 1,
@@ -30,6 +31,7 @@ const NODE_ICONS = {
   image: "🖼",
   tasks: "☑",
   zone: "▭",
+  table: "▦",
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -304,6 +306,7 @@ const PLACE_TOOLS = {
   note: { stateKey: "addNoteMode", btn: "#add-note-btn" },
   tasks: { stateKey: "addTasksMode", btn: "#add-tasks-btn" },
   zone: { stateKey: "addZoneMode", btn: "#add-zone-btn" },
+  table: { stateKey: "addTableMode", btn: "#add-table-btn" },
 };
 function armPlaceTool(name) {
   const turningOn = !state[PLACE_TOOLS[name].stateKey];
@@ -320,10 +323,15 @@ $("#add-tasks-btn").onclick = () => armPlaceTool("tasks");
 // ones about the same topic - drag its corner to resize, drag its label to
 // move it, click the label to rename/recolor it.
 $("#add-zone-btn").onclick = () => armPlaceTool("zone");
+// A spreadsheet-style grid right on the board - click cells to type into
+// them, grow it with rows/columns as needed. Separate from the Reports
+// markdown tables (those stay a "| a | b |" text-based table meant for a
+// written report; this is a freeform grid meant for the map itself).
+$("#add-table-btn").onclick = () => armPlaceTool("table");
 
 canvas.addEventListener("click", async (e) => {
   if (e.target !== canvas) return;
-  if (!state.addNoteMode && !state.addTasksMode && !state.addZoneMode) return;
+  if (!state.addNoteMode && !state.addTasksMode && !state.addZoneMode && !state.addTableMode) return;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / state.zoom - 95;
   const y = (e.clientY - rect.top) / state.zoom - 20;
@@ -332,6 +340,21 @@ canvas.addEventListener("click", async (e) => {
     const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
       method: "POST",
       body: JSON.stringify({ title: "Zone", type: "zone", color: "#5b8cff", x, y, width: 320, height: 220 }),
+    });
+    state.nodes.push(created);
+    pushHistory(makeCreateNodeAction(created));
+    renderCanvas();
+    return;
+  }
+  if (state.addTableMode) {
+    const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: "Table",
+        type: "table",
+        content: JSON.stringify([["", ""], ["", ""]]),
+        x, y,
+      }),
     });
     state.nodes.push(created);
     pushHistory(makeCreateNodeAction(created));
@@ -362,7 +385,7 @@ canvas.addEventListener("click", async (e) => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && (state.addNoteMode || state.addTasksMode || state.addZoneMode)) {
+  if (e.key === "Escape" && (state.addNoteMode || state.addTasksMode || state.addZoneMode || state.addTableMode)) {
     Object.values(PLACE_TOOLS).forEach((tool) => {
       state[tool.stateKey] = false;
       $(tool.btn).classList.remove("active");
@@ -466,6 +489,7 @@ function buildNodeEl(node) {
   const isImage = node.type === "image";
   const isTasks = node.type === "tasks";
   const isZone = node.type === "zone";
+  const isTable = node.type === "table";
 
   if (isImage) {
     return buildImageNodeEl(el, node);
@@ -475,6 +499,9 @@ function buildNodeEl(node) {
   }
   if (isZone) {
     return buildZoneNodeEl(el, node);
+  }
+  if (isTable) {
+    return buildTableNodeEl(el, node);
   }
 
   const action = QUICK_ACTIONS[node.type];
@@ -660,6 +687,100 @@ function buildZoneNodeEl(el, node) {
     window.addEventListener("mouseup", onUp);
   });
 
+  el.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, node);
+  });
+  return el;
+}
+
+// Table node: a small spreadsheet-style grid right on the board, separate
+// from the Reports markdown tables - grid data is stored as a JSON array
+// of rows (each an array of cell strings) in node.content.
+function parseTableGrid(content) {
+  try {
+    const grid = JSON.parse(content || "null");
+    if (Array.isArray(grid) && grid.length && Array.isArray(grid[0])) return grid;
+  } catch { /* fall through to default */ }
+  return [["", ""], ["", ""]];
+}
+
+function buildTableNodeEl(el, node) {
+  el.classList.add("node-table-card");
+  const grid = parseTableGrid(node.content);
+  makeDraggable(el, node);
+
+  const save = async () => {
+    node.content = JSON.stringify(grid);
+    await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify({ content: node.content }) });
+  };
+
+  const gridEl = document.createElement("table");
+  gridEl.className = "node-table-grid";
+
+  const renderGrid = () => {
+    gridEl.innerHTML = grid.map((row, ri) =>
+      `<tr>${row.map((cell, ci) =>
+        `<td contenteditable="true" data-r="${ri}" data-c="${ci}">${escapeHtml(cell)}</td>`
+      ).join("")}</tr>`
+    ).join("");
+  };
+  renderGrid();
+
+  el.innerHTML = `
+    <div class="node-header">
+      <div class="node-icon-badge">${NODE_ICONS.table}</div>
+      <div class="node-title">${escapeHtml(node.title)}</div>
+    </div>
+    <div class="node-table-wrap"></div>
+    <div class="node-table-controls">
+      <button type="button" class="table-add-row" title="Add row">+ Row</button>
+      <button type="button" class="table-add-col" title="Add column">+ Col</button>
+    </div>
+  `;
+  el.querySelector(".node-table-wrap").appendChild(gridEl);
+
+  const wrap = el.querySelector(".node-table-wrap");
+  wrap.addEventListener("mousedown", (e) => e.stopPropagation());
+  wrap.addEventListener("click", (e) => e.stopPropagation());
+  // blur doesn't bubble, so listen in the capture phase to catch it from
+  // whichever <td> just lost focus after an edit.
+  wrap.addEventListener("blur", (e) => {
+    const td = e.target.closest && e.target.closest("td[contenteditable]");
+    if (!td) return;
+    const r = Number(td.dataset.r), c = Number(td.dataset.c);
+    if (grid[r] && grid[r][c] !== undefined) {
+      grid[r][c] = td.textContent;
+      save();
+    }
+  }, true);
+  wrap.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+  });
+
+  el.querySelector(".table-add-row").addEventListener("mousedown", (e) => e.stopPropagation());
+  el.querySelector(".table-add-row").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    grid.push(grid[0].map(() => ""));
+    renderGrid();
+    await save();
+  });
+  el.querySelector(".table-add-col").addEventListener("mousedown", (e) => e.stopPropagation());
+  el.querySelector(".table-add-col").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    grid.forEach((row) => row.push(""));
+    renderGrid();
+    await save();
+  });
+
+  el.querySelector(".node-header").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (el._dragMoved) { el._dragMoved = false; return; }
+    if (state.connectMode) handleConnectClick(node.id, el);
+    else openNodeModal(node);
+  });
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
     e.stopPropagation();

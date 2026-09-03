@@ -206,6 +206,7 @@ button:disabled { opacity: .4; cursor: default; }
 #add-note-btn.active { background: #ffd86b26; color: #ffd86b; border-color: #ffd86b; }
 #add-tasks-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 #add-zone-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+#add-table-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 #canvas-wrapper.note-tool-active #canvas { cursor: text; }
 
 .help { color: var(--muted); font-size: 12px; padding-left: 16px; line-height: 1.7; margin: 8px 0 0; }
@@ -564,6 +565,42 @@ button:disabled { opacity: .4; cursor: default; }
   color: var(--text);
 }
 .node-task-add:focus { outline: none; border-color: var(--accent); }
+
+/* Table node - a small spreadsheet grid right on the board */
+.node.node-table-card { width: auto; max-width: 480px; cursor: default; }
+.node-table-card .node-header { display: flex; align-items: center; gap: 0; cursor: pointer; margin-bottom: 8px; }
+.node-table-card .node-icon-badge { position: static; width: 22px; height: 22px; font-size: 12px; box-shadow: none; margin-right: 6px; flex-shrink: 0; }
+.node-table-card .node-title { margin: 0; }
+.node-table-wrap { overflow-x: auto; max-width: 100%; }
+.node-table-grid {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.node-table-grid td {
+  border: 1px solid var(--border);
+  padding: 5px 8px;
+  min-width: 60px;
+  max-width: 220px;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.node-table-grid td:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--panel-3);
+}
+.node-table-controls { display: flex; gap: 6px; margin-top: 8px; }
+.node-table-controls button {
+  width: auto;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.node-table-controls button:hover { color: var(--text); border-color: var(--accent); }
 
 .node-icon-badge {
   position: absolute;

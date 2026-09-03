@@ -211,24 +211,6 @@ canvasWrapper.addEventListener(
 $("#zoom-in-btn").onclick = () => setZoom(state.zoom + ZOOM_STEP);
 $("#zoom-out-btn").onclick = () => setZoom(state.zoom - ZOOM_STEP);
 
-$("#zoom-fit-btn").onclick = () => {
-  if (!state.nodes.length) return;
-  const pad = 60;
-  const xs = state.nodes.map((n) => n.x);
-  const ys = state.nodes.map((n) => n.y);
-  const minX = Math.min(...xs) - pad;
-  const minY = Math.min(...ys) - pad;
-  const maxX = Math.max(...xs) + 180 + pad;
-  const maxY = Math.max(...ys) + 90 + pad;
-  const boxW = maxX - minX;
-  const boxH = maxY - minY;
-  const availW = canvasWrapper.clientWidth;
-  const availH = canvasWrapper.clientHeight;
-  setZoom(Math.min(availW / boxW, availH / boxH, ZOOM_MAX));
-  canvasWrapper.scrollLeft = minX * state.zoom;
-  canvasWrapper.scrollTop = minY * state.zoom;
-};
-
 applyZoom();
 
 // ---------- undo / redo ----------
@@ -725,12 +707,15 @@ function buildTableNodeEl(el, node) {
   gridEl.className = "node-table-grid";
 
   // One small × tucked into each cell - invisible until that exact cell is
-  // hovered, then it fades in so a click there just clears that one cell's
-  // text, leaving the row/column layout untouched.
+  // hovered, then it fades in so a click there deletes that cell's whole
+  // column (every row keeps the same length, so there's no such thing as
+  // removing just one cell without shifting the rest of its row).
   const renderGrid = () => {
     gridEl.innerHTML = grid.map((row, ri) =>
       `<tr>${row.map((cell, ci) =>
-        `<td data-r="${ri}" data-c="${ci}"><div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div><span class="cell-clear-btn" title="Clear cell">×</span></td>`
+        `<td data-r="${ri}" data-c="${ci}"><div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div>${
+          grid[0].length > 1 ? `<span class="cell-clear-btn" title="Delete column">×</span>` : ""
+        }</td>`
       ).join("")}</tr>`
     ).join("");
   };
@@ -743,12 +728,9 @@ function buildTableNodeEl(el, node) {
     const clearBtn = e.target.closest(".cell-clear-btn");
     if (!clearBtn) return;
     const td = clearBtn.closest("td");
-    const r = Number(td.dataset.r), c = Number(td.dataset.c);
-    if (!grid[r] || grid[r][c] === undefined) return;
-    // Even if the cell still shows unsaved text being typed (its blur/save
-    // never fired), re-rendering from a cleared grid value wipes the DOM
-    // too - so this always actually clears what's on screen.
-    grid[r][c] = "";
+    const c = Number(td.dataset.c);
+    if (grid[0].length <= 1) return;
+    grid.forEach((row) => row.splice(c, 1));
     renderGrid();
     await save();
   });

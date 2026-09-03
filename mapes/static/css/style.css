@@ -633,36 +633,31 @@ button:disabled { opacity: .4; cursor: default; }
   outline-offset: -2px;
   background: var(--panel-2);
 }
-/* A slim, borderless cell tacked onto the right end of each row holding a
-   single × - invisible until that row is hovered, so the row's delete
-   control doesn't visually compete with the data itself. */
-.node-table-grid td.row-del-cell {
-  border: none;
-  background: transparent;
-  min-width: 22px;
-  width: 22px;
-  padding: 0;
-  text-align: center;
-  vertical-align: middle;
-}
-.row-del-btn {
+/* A tiny × tucked into each cell's own corner - invisible until that exact
+   cell is hovered, so it never competes visually with the data, and only
+   ever clears that one cell rather than a whole row or column. */
+.cell-clear-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1;
   color: var(--muted);
   cursor: pointer;
   opacity: 0;
   transition: opacity .12s ease, color .12s ease, background .12s ease;
+  z-index: 2;
 }
-.node-table-grid tr:hover .row-del-btn {
+.node-table-grid td:hover .cell-clear-btn {
   opacity: 1;
 }
-.row-del-btn:hover {
+.cell-clear-btn:hover {
   color: var(--danger);
   background: var(--danger-dim);
 }

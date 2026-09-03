@@ -723,28 +723,28 @@ function buildTableNodeEl(el, node) {
   const gridEl = document.createElement("table");
   gridEl.className = "node-table-grid";
 
-  // One small × per row, tucked in a slim extra cell at the row's right
-  // edge - invisible until that row is hovered, then it fades in so a
-  // click there deletes just that row. No column-delete affordance at
-  // all anymore (that's what "+ Col" removal would be for, if ever added).
+  // One small × tucked into each cell - invisible until that exact cell is
+  // hovered, then it fades in so a click there just clears that one cell's
+  // text, leaving the row/column layout untouched.
   const renderGrid = () => {
     gridEl.innerHTML = grid.map((row, ri) =>
       `<tr>${row.map((cell, ci) =>
-        `<td data-r="${ri}" data-c="${ci}"><div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div></td>`
-      ).join("")}<td class="row-del-cell">${
-        grid.length > 1 ? `<span class="row-del-btn" data-r="${ri}" title="Delete row">×</span>` : ""
-      }</td></tr>`
+        `<td data-r="${ri}" data-c="${ci}"><div class="cell-text" contenteditable="true">${escapeHtml(cell)}</div><span class="cell-clear-btn" title="Clear cell">×</span></td>`
+      ).join("")}</tr>`
     ).join("");
   };
   renderGrid();
 
   gridEl.addEventListener("mousedown", (e) => {
-    if (e.target.closest(".row-del-btn")) e.preventDefault();
+    if (e.target.closest(".cell-clear-btn")) e.preventDefault();
   });
   gridEl.addEventListener("click", async (e) => {
-    const delRow = e.target.closest(".row-del-btn");
-    if (!delRow || grid.length <= 1) return;
-    grid.splice(Number(delRow.dataset.r), 1);
+    const clearBtn = e.target.closest(".cell-clear-btn");
+    if (!clearBtn) return;
+    const td = clearBtn.closest("td");
+    const r = Number(td.dataset.r), c = Number(td.dataset.c);
+    if (!grid[r] || grid[r][c] === undefined || grid[r][c] === "") return;
+    grid[r][c] = "";
     renderGrid();
     await save();
   });

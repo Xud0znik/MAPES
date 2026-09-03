@@ -1,9 +1,0 @@
-{
-    "host": "127.0.0.1",
-    "port": 8777,
-    "tls": true,
-    "cert": "",
-    "key": "",
-    "session_hours": 12,
-    "allowed_hosts": []
-}

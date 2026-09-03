@@ -394,14 +394,18 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-// Fullscreen canvas: hide the sidebar so the board gets the full window.
-// Esc also exits it, same as it does for the note/task tools.
-$("#fullscreen-btn").onclick = () => {
-  document.getElementById("app").classList.toggle("sidebar-hidden");
-};
+// Collapse the sidebar to the left, like a normal app's collapsible side
+// panel - an arrow on the sidebar's own edge tucks it away, and a small
+// tab left in its place brings it back.
+function setSidebarCollapsed(collapsed) {
+  document.getElementById("app").classList.toggle("sidebar-hidden", collapsed);
+  $("#sidebar-expand-btn").hidden = !collapsed;
+}
+$("#sidebar-collapse-btn").onclick = () => setSidebarCollapsed(true);
+$("#sidebar-expand-btn").onclick = () => setSidebarCollapsed(false);
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && document.getElementById("app").classList.contains("sidebar-hidden")) {
-    document.getElementById("app").classList.remove("sidebar-hidden");
+    setSidebarCollapsed(false);
   }
 });
 

@@ -11,6 +11,7 @@
 <div id="app">
   <aside id="sidebar">
     <div id="sidebar-resize-handle" title="Drag to resize"></div>
+    <button id="sidebar-collapse-btn" title="Hide sidebar">◀</button>
     <div class="brand"><img class="brand-mark" src="{{ url_for('static', filename='img/favicon.png') }}" alt="">MAPES</div>
 
     <div class="section-title">◆ Boards</div>
@@ -50,6 +51,7 @@
       </ul>
     </details>
   </aside>
+  <button id="sidebar-expand-btn" title="Show sidebar" hidden>▶</button>
 
   <main id="board-area">
     <div id="view-tabs">
@@ -80,7 +82,6 @@
         <button id="add-zone-btn" class="btn-ghost">▭ Zone</button>
         <button id="add-table-btn" class="btn-ghost">▦ Table</button>
         <button id="connect-btn" class="btn-ghost">⌁ Connect nodes</button>
-        <button id="fullscreen-btn" class="icon-btn" title="Hide sidebar (fullscreen canvas)">⛶</button>
         <button id="delete-board-btn" class="btn-ghost danger">Delete board</button>
       </div>
       <div id="canvas-wrapper">

@@ -784,6 +784,7 @@ button:disabled { opacity: .4; cursor: default; }
   font-size: 10.5px;
   color: var(--muted);
 }
+.node-badge img { width: 12px; height: 12px; object-fit: contain; flex-shrink: 0; }
 
 .modal {
   position: fixed;
@@ -953,6 +954,7 @@ tr.empty-row td {
   padding: 40px 20px;
 }
 .vault-card {
+  position: relative;
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -960,6 +962,46 @@ tr.empty-row td {
   cursor: pointer;
   transition: box-shadow .12s ease;
 }
+.vault-card-menu-btn {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease;
+  z-index: 2;
+}
+.vault-card:hover .vault-card-menu-btn { opacity: 1; }
+.vault-card-menu-btn:hover { color: var(--text); border-color: var(--accent); }
+.vault-card-menu {
+  position: absolute;
+  right: 6px;
+  bottom: 32px;
+  min-width: 120px;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.5);
+  overflow: hidden;
+  z-index: 3;
+}
+.vault-card-menu-item {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.vault-card-menu-item:hover { background: var(--panel-2); }
+.vault-card-menu-item.danger { color: var(--danger); }
 .vault-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 .vault-thumb {
   width: 100%;

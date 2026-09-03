@@ -913,9 +913,9 @@ function updateNodeBadges(el, node) {
   }
   badgesEl.style.display = "flex";
   const parts = [];
-  if (counts.captures) parts.push(`<span class="node-badge">🖼 ${counts.captures}</span>`);
-  if (counts.creds) parts.push(`<span class="node-badge">🔑 ${counts.creds}</span>`);
-  if (counts.findings) parts.push(`<span class="node-badge">⚑ ${counts.findings}</span>`);
+  if (counts.captures) parts.push(`<span class="node-badge"><img src="/static/img/icons/vault.png" alt=""> ${counts.captures}</span>`);
+  if (counts.creds) parts.push(`<span class="node-badge"><img src="/static/img/icons/credentials.png" alt=""> ${counts.creds}</span>`);
+  if (counts.findings) parts.push(`<span class="node-badge"><img src="/static/img/icons/findings.png" alt=""> ${counts.findings}</span>`);
   badgesEl.innerHTML = parts.join("");
 }
 
@@ -1718,6 +1718,21 @@ function isSpreadsheetPreviewable(cap) {
   return ext === ".xlsx" || ext === ".xlsm";
 }
 
+// Windows Notepad has historically saved plain .txt files as UTF-16 (with
+// a BOM), not UTF-8 - fetch's default text() always decodes as UTF-8, so a
+// UTF-16 file comes out as near-invisible garbage (mostly null bytes).
+// Sniff the BOM and pick the right decoder instead of assuming UTF-8.
+function decodeTextBuffer(buf) {
+  const bytes = new Uint8Array(buf);
+  if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+    return new TextDecoder("utf-16le").decode(buf);
+  }
+  if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return new TextDecoder("utf-16be").decode(buf);
+  }
+  return new TextDecoder("utf-8").decode(buf);
+}
+
 async function loadVault() {
   const [folders, items] = await Promise.all([
     api(`/api/boards/${state.currentBoardId}/capture-folders${vaultFolderId ? `?parent_id=${vaultFolderId}` : ""}`),
@@ -1739,17 +1754,43 @@ async function loadVault() {
         <div class="vault-card-name">${escapeHtml(folder.name)}</div>
         <div class="vault-card-meta">Folder</div>
       </div>
+      <button type="button" class="vault-card-menu-btn" title="More">⋯</button>
+      <div class="vault-card-menu hidden">
+        <div class="vault-card-menu-item" data-action="rename">Rename</div>
+        <div class="vault-card-menu-item" data-action="duplicate">Duplicate</div>
+        <div class="vault-card-menu-item danger" data-action="delete">Delete</div>
+      </div>
     `;
     card.onclick = () => {
       vaultFolderPath.push({ id: folder.id, name: folder.name });
       vaultFolderId = folder.id;
       loadVault();
     };
-    card.oncontextmenu = async (e) => {
-      e.preventDefault();
-      if (!confirm(`Delete folder "${folder.name}" and everything inside it?`)) return;
-      await api(`/api/capture-folders/${folder.id}`, { method: "DELETE" });
-      await loadVault();
+    const menuBtn = card.querySelector(".vault-card-menu-btn");
+    const menu = card.querySelector(".vault-card-menu");
+    menuBtn.onclick = (e) => {
+      e.stopPropagation();
+      document.querySelectorAll(".vault-card-menu").forEach((m) => { if (m !== menu) m.classList.add("hidden"); });
+      menu.classList.toggle("hidden");
+    };
+    menu.onclick = async (e) => {
+      e.stopPropagation();
+      const action = e.target.closest(".vault-card-menu-item")?.dataset.action;
+      if (!action) return;
+      menu.classList.add("hidden");
+      if (action === "rename") {
+        const name = prompt("Rename folder:", folder.name);
+        if (!name || !name.trim() || name.trim() === folder.name) return;
+        await api(`/api/capture-folders/${folder.id}`, { method: "PATCH", body: JSON.stringify({ name: name.trim() }) });
+        await loadVault();
+      } else if (action === "duplicate") {
+        await api(`/api/capture-folders/${folder.id}/duplicate`, { method: "POST" });
+        await loadVault();
+      } else if (action === "delete") {
+        if (!confirm(`Delete folder "${folder.name}" and everything inside it?`)) return;
+        await api(`/api/capture-folders/${folder.id}`, { method: "DELETE" });
+        await loadVault();
+      }
     };
     grid.appendChild(card);
   });
@@ -1788,6 +1829,10 @@ function renderVaultBreadcrumb() {
     };
   });
 }
+
+document.addEventListener("click", () => {
+  document.querySelectorAll(".vault-card-menu").forEach((m) => m.classList.add("hidden"));
+});
 
 $("#vault-upload-btn").onclick = () => $("#vault-file-input").click();
 
@@ -1930,9 +1975,10 @@ async function openCaptureModal(cap) {
   } else if (isTextPreviewable(cap)) {
     preview.innerHTML = `<pre class="capture-text-preview">Loading...</pre>`;
     fetch(fileUrl)
-      .then((r) => r.text())
-      .then((text) => {
-        preview.querySelector(".capture-text-preview").textContent = text;
+      .then((r) => r.arrayBuffer())
+      .then((buf) => {
+        const text = decodeTextBuffer(buf);
+        preview.querySelector(".capture-text-preview").textContent = text || "(this file is empty)";
       })
       .catch(() => {
         preview.querySelector(".capture-text-preview").textContent = "(couldn't load preview)";

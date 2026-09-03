@@ -287,6 +287,44 @@ def create_app():
             conn.commit()
         return "", 204
 
+    def _duplicate_capture_file(conn, cap, folder_id):
+        cur = conn.execute(
+            """INSERT INTO captures (board_id, node_id, folder_id, filename, orig_name, mime, size, caption, tags)
+               VALUES (?, NULL, ?, '', ?, ?, ?, ?, ?)""",
+            (cap["board_id"], folder_id, cap["orig_name"], cap["mime"], cap["size"], cap["caption"], cap["tags"]),
+        )
+        new_id = cur.lastrowid
+        ext = Path(cap["orig_name"]).suffix or (mimetypes.guess_extension(cap["mime"]) or "")
+        filename = f"cap-{new_id}-{_slug(Path(cap['orig_name']).stem)}{ext}"
+        src = db.captures_dir_for(cap["board_id"]) / cap["filename"]
+        if src.is_file():
+            (db.captures_dir_for(cap["board_id"]) / filename).write_bytes(src.read_bytes())
+        conn.execute("UPDATE captures SET filename = ? WHERE id = ?", (filename, new_id))
+
+    def _duplicate_folder_tree(conn, folder, parent_id, rename):
+        name = f"{folder['name']} copy" if rename else folder["name"]
+        cur = conn.execute(
+            "INSERT INTO capture_folders (board_id, parent_id, name) VALUES (?, ?, ?)",
+            (folder["board_id"], parent_id, name),
+        )
+        new_folder_id = cur.lastrowid
+        for cap in conn.execute("SELECT * FROM captures WHERE folder_id = ?", (folder["id"],)).fetchall():
+            _duplicate_capture_file(conn, cap, new_folder_id)
+        for sub in conn.execute("SELECT * FROM capture_folders WHERE parent_id = ?", (folder["id"],)).fetchall():
+            _duplicate_folder_tree(conn, sub, new_folder_id, rename=False)
+        return new_folder_id
+
+    @app.post("/api/capture-folders/<int:folder_id>/duplicate")
+    def duplicate_capture_folder(folder_id):
+        conn = get_connection()
+        folder = conn.execute("SELECT * FROM capture_folders WHERE id = ?", (folder_id,)).fetchone()
+        if not folder:
+            return jsonify({"error": "not found"}), 404
+        new_id = _duplicate_folder_tree(conn, folder, folder["parent_id"], rename=True)
+        conn.commit()
+        row = conn.execute("SELECT * FROM capture_folders WHERE id = ?", (new_id,)).fetchone()
+        return jsonify(dict(row)), 201
+
     @app.get("/api/boards/<int:board_id>/captures")
     def list_captures(board_id):
         node_id = request.args.get("node_id")

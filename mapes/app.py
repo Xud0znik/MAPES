@@ -352,6 +352,41 @@ def create_app():
             return jsonify({"error": "File missing on disk"}), 404
         return Response(path.read_bytes(), mimetype=cap["mime"] or "application/octet-stream")
 
+    @app.get("/api/captures/<int:capture_id>/preview")
+    def get_capture_preview(capture_id):
+        """Server-side spreadsheet preview so .xlsx/.xls files can be shown
+        as a real table right in the Vault modal instead of just a generic
+        file icon - there's no way to render Excel's binary format in the
+        browser itself."""
+        conn = get_connection()
+        cap = conn.execute("SELECT * FROM captures WHERE id = ?", (capture_id,)).fetchone()
+        if not cap:
+            return jsonify({"error": "not found"}), 404
+        ext = Path(cap["orig_name"]).suffix.lower()
+        if ext not in (".xlsx", ".xlsm"):
+            return jsonify({"error": "No preview available for this file type"}), 400
+        path = db.captures_dir_for(cap["board_id"]) / cap["filename"]
+        if not path.is_file():
+            return jsonify({"error": "File missing on disk"}), 404
+        try:
+            import openpyxl
+            wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        except Exception as exc:
+            return jsonify({"error": f"Could not read spreadsheet: {exc}"}), 400
+        MAX_ROWS, MAX_COLS = 300, 60
+        sheets = []
+        for ws in wb.worksheets:
+            rows = []
+            for i, row in enumerate(ws.iter_rows(max_row=MAX_ROWS, max_col=MAX_COLS)):
+                rows.append(["" if c.value is None else str(c.value) for c in row])
+            sheets.append({
+                "name": ws.title,
+                "rows": rows,
+                "truncated": (ws.max_row or 0) > MAX_ROWS or (ws.max_column or 0) > MAX_COLS,
+            })
+        wb.close()
+        return jsonify({"sheets": sheets})
+
     @app.patch("/api/captures/<int:capture_id>")
     def update_capture(capture_id):
         data = request.get_json(force=True) or {}

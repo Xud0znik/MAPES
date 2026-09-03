@@ -97,8 +97,10 @@
     <div id="vault-view" class="view-panel hidden">
       <div class="panel-toolbar">
         <button id="vault-upload-btn" class="btn-primary">+ Upload file</button>
+        <button id="vault-upload-folder-btn" class="btn-secondary">+ Upload folder</button>
         <button id="vault-new-folder-btn" class="btn-secondary">+ New folder</button>
         <input id="vault-file-input" type="file" hidden>
+        <input id="vault-folder-input" type="file" webkitdirectory directory multiple hidden>
       </div>
       <div id="vault-breadcrumb" class="vault-breadcrumb"></div>
       <div id="vault-grid" class="vault-grid"></div>
@@ -230,6 +232,10 @@
       <button id="capture-save" class="btn-primary">Save</button>
     </div>
   </div>
+</div>
+
+<div id="image-lightbox" class="image-lightbox hidden">
+  <img src="" alt="">
 </div>
 
 <div id="cred-modal" class="modal hidden">

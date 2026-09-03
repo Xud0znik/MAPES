@@ -1281,6 +1281,9 @@ document.addEventListener("keydown", (e) => {
     revertLiveColor();
     closeNodeModal();
   }
+  if (e.key === "Escape" && !$("#image-lightbox").classList.contains("hidden")) {
+    $("#image-lightbox").classList.add("hidden");
+  }
 });
 
 function revertLiveColor() {
@@ -1710,6 +1713,11 @@ function isTextPreviewable(cap) {
   return TEXT_PREVIEW_EXT.includes(ext);
 }
 
+function isSpreadsheetPreviewable(cap) {
+  const ext = (cap.orig_name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+  return ext === ".xlsx" || ext === ".xlsm";
+}
+
 async function loadVault() {
   const [folders, items] = await Promise.all([
     api(`/api/boards/${state.currentBoardId}/capture-folders${vaultFolderId ? `?parent_id=${vaultFolderId}` : ""}`),
@@ -1793,29 +1801,112 @@ $("#vault-new-folder-btn").onclick = async () => {
   await loadVault();
 };
 
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadOneFile(file, folder_id) {
+  const data = await readFileAsDataUrl(file);
+  await api(`/api/boards/${state.currentBoardId}/captures`, {
+    method: "POST",
+    body: JSON.stringify({
+      data,
+      orig_name: file.name,
+      mime: file.type || "application/octet-stream",
+      folder_id,
+    }),
+  });
+}
+
 $("#vault-file-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   e.target.value = "";
   if (!file || !state.currentBoardId) return;
-  const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      await api(`/api/boards/${state.currentBoardId}/captures`, {
-        method: "POST",
-        body: JSON.stringify({
-          data: reader.result,
-          orig_name: file.name,
-          mime: file.type || "application/octet-stream",
-          folder_id: vaultFolderId,
-        }),
-      });
-      await loadVault();
-    } catch (err) {
-      alert(`Upload error: ${err.message}`);
-    }
-  };
-  reader.readAsDataURL(file);
+  try {
+    await uploadOneFile(file, vaultFolderId);
+    await loadVault();
+  } catch (err) {
+    alert(`Upload error: ${err.message}`);
+  }
 });
+
+$("#vault-upload-folder-btn").onclick = () => $("#vault-folder-input").click();
+
+// Recreates the picked local folder's structure as Vault sub-folders (one
+// API call per never-seen-before directory, cached by path so nested files
+// sharing a parent only create it once), then uploads every file into the
+// folder that matches its original relative path.
+$("#vault-folder-input").addEventListener("change", async (e) => {
+  const files = Array.from(e.target.files);
+  e.target.value = "";
+  if (!files.length || !state.currentBoardId) return;
+
+  const folderIdByPath = new Map([["", vaultFolderId]]);
+  const resolveFolder = async (dirPath) => {
+    if (folderIdByPath.has(dirPath)) return folderIdByPath.get(dirPath);
+    const parts = dirPath.split("/");
+    const parentId = await resolveFolder(parts.slice(0, -1).join("/"));
+    const folder = await api(`/api/boards/${state.currentBoardId}/capture-folders`, {
+      method: "POST",
+      body: JSON.stringify({ name: parts[parts.length - 1], parent_id: parentId }),
+    });
+    folderIdByPath.set(dirPath, folder.id);
+    return folder.id;
+  };
+
+  let failed = 0;
+  for (const file of files) {
+    const relPath = file.webkitRelativePath || file.name;
+    const dirPath = relPath.split("/").slice(0, -1).join("/");
+    try {
+      const folderId = await resolveFolder(dirPath);
+      await uploadOneFile(file, folderId);
+    } catch {
+      failed++;
+    }
+  }
+  await loadVault();
+  if (failed) alert(`${failed} file(s) failed to upload.`);
+});
+
+function renderSheetPreview(preview, data) {
+  if (data.error || !data.sheets || !data.sheets.length) {
+    preview.innerHTML = `<div class="capture-sheet-preview">${escapeHtml(data.error || "No data")}</div>`;
+    return;
+  }
+  const sheets = data.sheets;
+  const tabsHtml = sheets.length > 1
+    ? `<div class="sheet-tabs">${sheets.map((s, i) => `<button type="button" class="sheet-tab${i === 0 ? " active" : ""}" data-i="${i}">${escapeHtml(s.name)}</button>`).join("")}</div>`
+    : "";
+  const renderTable = (sheet) => `
+    <div class="capture-sheet-wrap">
+      <table class="capture-sheet-table">
+        ${sheet.rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
+      </table>
+      ${sheet.truncated ? `<div class="sheet-truncated-note">Showing a partial preview - open the file to see the rest.</div>` : ""}
+    </div>
+  `;
+  preview.innerHTML = `${tabsHtml}${renderTable(sheets[0])}`;
+  preview.querySelectorAll(".sheet-tab").forEach((btn) => {
+    btn.onclick = () => {
+      preview.querySelectorAll(".sheet-tab").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      preview.querySelector(".capture-sheet-wrap").outerHTML = renderTable(sheets[Number(btn.dataset.i)]);
+    };
+  });
+}
+
+function openImageLightbox(url) {
+  const box = $("#image-lightbox");
+  box.querySelector("img").src = url;
+  box.classList.remove("hidden");
+}
+$("#image-lightbox").onclick = () => $("#image-lightbox").classList.add("hidden");
 
 async function openCaptureModal(cap) {
   editingCaptureId = cap.id;
@@ -1824,9 +1915,18 @@ async function openCaptureModal(cap) {
   const fileUrl = `/api/captures/${cap.id}/file`;
   const preview = $("#capture-preview");
   if (isImage) {
-    preview.innerHTML = `<img src="${fileUrl}">`;
+    preview.innerHTML = `<img src="${fileUrl}" title="Click to enlarge">`;
+    preview.querySelector("img").onclick = () => openImageLightbox(fileUrl);
   } else if (isPdf) {
     preview.innerHTML = `<iframe class="capture-pdf-frame" src="${fileUrl}"></iframe>`;
+  } else if (isSpreadsheetPreviewable(cap)) {
+    preview.innerHTML = `<div class="capture-sheet-preview">Loading...</div>`;
+    fetch(`/api/captures/${cap.id}/preview`)
+      .then((r) => r.json())
+      .then((data) => renderSheetPreview(preview, data))
+      .catch(() => {
+        preview.innerHTML = `<div class="capture-sheet-preview">(couldn't load preview)</div>`;
+      });
   } else if (isTextPreviewable(cap)) {
     preview.innerHTML = `<pre class="capture-text-preview">Loading...</pre>`;
     fetch(fileUrl)

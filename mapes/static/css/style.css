@@ -334,6 +334,27 @@ button:disabled { opacity: .4; cursor: default; }
 #board-toolbar button { width: auto; margin-top: 0; flex-shrink: 0; }
 #board-title { font-weight: 600; letter-spacing: .2px; flex-shrink: 0; }
 .toolbar-spacer { flex: 1; min-width: 12px; }
+
+/* A pill-shaped cluster that visually detaches the node-creation actions
+   from the rest of the toolbar (title/undo/zoom), rather than them just
+   being more buttons in the same flat row. */
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+}
+.toolbar-actions button {
+  border-radius: 999px;
+}
+.toolbar-actions .btn-ghost.danger {
+  margin-left: 2px;
+}
 .toolbar-sep {
   width: 1px;
   height: 20px;
@@ -990,6 +1011,34 @@ tr.empty-row td {
 }
 .capture-preview img { max-width: 100%; max-height: 240px; display: block; }
 .capture-preview .file-icon { font-size: 40px; padding: 40px; }
+.capture-pdf-frame { width: 100%; height: 420px; border: none; background: #fff; }
+.capture-text-preview {
+  width: 100%;
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+  color: var(--text);
+}
+
+.vault-folder-card .vault-thumb { font-size: 40px; }
+.vault-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.vault-crumb { cursor: pointer; }
+.vault-crumb:hover { color: var(--text); text-decoration: underline; }
+.vault-crumb.active { color: var(--text); font-weight: 600; cursor: default; text-decoration: none; }
+.vault-crumb-sep { color: var(--border); }
 
 /* ---------- data table (credentials) ---------- */
 

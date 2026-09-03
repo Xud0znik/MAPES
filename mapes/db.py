@@ -55,10 +55,19 @@ CREATE TABLE IF NOT EXISTS edges (
     created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS capture_folders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    parent_id INTEGER REFERENCES capture_folders(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS captures (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     board_id INTEGER NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
     node_id INTEGER REFERENCES nodes(id) ON DELETE SET NULL,
+    folder_id INTEGER REFERENCES capture_folders(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
     orig_name TEXT DEFAULT '',
     mime TEXT DEFAULT 'image/png',
@@ -110,6 +119,7 @@ CREATE TABLE IF NOT EXISTS docs (
 CREATE INDEX IF NOT EXISTS idx_nodes_board ON nodes(board_id);
 CREATE INDEX IF NOT EXISTS idx_edges_board ON edges(board_id);
 CREATE INDEX IF NOT EXISTS idx_captures_board ON captures(board_id);
+CREATE INDEX IF NOT EXISTS idx_capture_folders_board ON capture_folders(board_id);
 CREATE INDEX IF NOT EXISTS idx_creds_board ON creds(board_id);
 CREATE INDEX IF NOT EXISTS idx_findings_board ON findings(board_id);
 CREATE INDEX IF NOT EXISTS idx_docs_board ON docs(board_id);
@@ -192,6 +202,7 @@ def init_db():
         conn.executescript(SCHEMA)
         _ensure_column(conn, "nodes", "width", "REAL")
         _ensure_column(conn, "nodes", "height", "REAL")
+        _ensure_column(conn, "captures", "folder_id", "INTEGER REFERENCES capture_folders(id) ON DELETE CASCADE")
         conn.commit()
         row = conn.execute("SELECT COUNT(*) AS c FROM boards").fetchone()
         if row["c"] == 0:

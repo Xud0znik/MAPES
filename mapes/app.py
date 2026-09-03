@@ -219,16 +219,90 @@ def create_app():
 
     # ---------- vault (attachments/captures) ----------
 
+    @app.get("/api/boards/<int:board_id>/capture-folders")
+    def list_capture_folders(board_id):
+        parent_id = request.args.get("parent_id")
+        conn = get_connection()
+        if parent_id:
+            rows = conn.execute(
+                "SELECT * FROM capture_folders WHERE board_id = ? AND parent_id = ? ORDER BY name",
+                (board_id, parent_id),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM capture_folders WHERE board_id = ? AND parent_id IS NULL ORDER BY name",
+                (board_id,),
+            ).fetchall()
+        return jsonify([dict(r) for r in rows])
+
+    @app.post("/api/boards/<int:board_id>/capture-folders")
+    def create_capture_folder(board_id):
+        data = request.get_json(force=True) or {}
+        name = (data.get("name") or "New folder").strip() or "New folder"
+        parent_id = data.get("parent_id") or None
+        conn = get_connection()
+        cur = conn.execute(
+            "INSERT INTO capture_folders (board_id, parent_id, name) VALUES (?, ?, ?)",
+            (board_id, parent_id, name),
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM capture_folders WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return jsonify(dict(row)), 201
+
+    @app.patch("/api/capture-folders/<int:folder_id>")
+    def rename_capture_folder(folder_id):
+        data = request.get_json(force=True) or {}
+        name = (data.get("name") or "").strip()
+        conn = get_connection()
+        if name:
+            conn.execute("UPDATE capture_folders SET name = ? WHERE id = ?", (name, folder_id))
+            conn.commit()
+        row = conn.execute("SELECT * FROM capture_folders WHERE id = ?", (folder_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "not found"}), 404
+        return jsonify(dict(row))
+
+    @app.delete("/api/capture-folders/<int:folder_id>")
+    def delete_capture_folder(folder_id):
+        conn = get_connection()
+        folder = conn.execute("SELECT * FROM capture_folders WHERE id = ?", (folder_id,)).fetchone()
+        if folder:
+            # ON DELETE CASCADE removes the DB rows for every capture and
+            # sub-folder nested under this one, but not their files on
+            # disk - collect those first (recursively) so they get
+            # unlinked too, same as a normal single-capture delete.
+            caps = conn.execute(
+                """WITH RECURSIVE sub(id) AS (
+                       SELECT id FROM capture_folders WHERE id = ?
+                       UNION ALL
+                       SELECT capture_folders.id FROM capture_folders
+                       JOIN sub ON capture_folders.parent_id = sub.id
+                   )
+                   SELECT captures.* FROM captures JOIN sub ON captures.folder_id = sub.id""",
+                (folder_id,),
+            ).fetchall()
+            for cap in caps:
+                (db.captures_dir_for(cap["board_id"]) / cap["filename"]).unlink(missing_ok=True)
+            conn.execute("DELETE FROM capture_folders WHERE id = ?", (folder_id,))
+            conn.commit()
+        return "", 204
+
     @app.get("/api/boards/<int:board_id>/captures")
     def list_captures(board_id):
         node_id = request.args.get("node_id")
+        folder_id = request.args.get("folder_id")
         conn = get_connection()
-        sql = ("SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
+        sql = ("SELECT id, board_id, node_id, folder_id, orig_name, mime, size, caption, tags, created_at "
                "FROM captures WHERE board_id = ?")
         params = [board_id]
         if node_id:
             sql += " AND node_id = ?"
             params.append(node_id)
+        elif folder_id:
+            sql += " AND folder_id = ?"
+            params.append(folder_id)
+        else:
+            sql += " AND folder_id IS NULL"
         sql += " ORDER BY id DESC"
         rows = conn.execute(sql, params).fetchall()
         return jsonify([dict(r) for r in rows])
@@ -240,21 +314,20 @@ def create_app():
         if raw.startswith("data:"):
             raw = raw.split(",", 1)[-1]
         try:
-            blob = base64.b64decode(raw, validate=False)
+            blob = base64.b64decode(raw, validate=False) if raw else b""
         except (binascii.Error, ValueError):
             return jsonify({"error": "Invalid file data"}), 400
-        if not blob:
-            return jsonify({"error": "Empty file"}), 400
 
         orig_name = (data.get("orig_name") or "file").strip()
         mime = data.get("mime") or mimetypes.guess_type(orig_name)[0] or "application/octet-stream"
         node_id = data.get("node_id") or None
+        folder_id = data.get("folder_id") or None
 
         conn = get_connection()
         cur = conn.execute(
-            """INSERT INTO captures (board_id, node_id, filename, orig_name, mime, size, caption, tags)
-               VALUES (?, ?, '', ?, ?, ?, ?, ?)""",
-            (board_id, node_id, orig_name, mime, len(blob), data.get("caption", ""), data.get("tags", "")),
+            """INSERT INTO captures (board_id, node_id, folder_id, filename, orig_name, mime, size, caption, tags)
+               VALUES (?, ?, ?, '', ?, ?, ?, ?, ?)""",
+            (board_id, node_id, folder_id, orig_name, mime, len(blob), data.get("caption", ""), data.get("tags", "")),
         )
         cap_id = cur.lastrowid
         ext = Path(orig_name).suffix or (mimetypes.guess_extension(mime) or "")
@@ -263,7 +336,7 @@ def create_app():
         conn.execute("UPDATE captures SET filename = ? WHERE id = ?", (filename, cap_id))
         conn.commit()
         cap = conn.execute(
-            "SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
+            "SELECT id, board_id, node_id, folder_id, orig_name, mime, size, caption, tags, created_at "
             "FROM captures WHERE id = ?", (cap_id,),
         ).fetchone()
         return jsonify(dict(cap)), 201
@@ -283,13 +356,13 @@ def create_app():
     def update_capture(capture_id):
         data = request.get_json(force=True) or {}
         conn = get_connection()
-        fields = {k: data[k] for k in ("caption", "tags", "node_id") if k in data}
+        fields = {k: data[k] for k in ("caption", "tags", "node_id", "folder_id") if k in data}
         if fields:
             set_clause = ", ".join(f"{k} = ?" for k in fields)
             conn.execute(f"UPDATE captures SET {set_clause} WHERE id = ?", (*fields.values(), capture_id))
             conn.commit()
         cap = conn.execute(
-            "SELECT id, board_id, node_id, orig_name, mime, size, caption, tags, created_at "
+            "SELECT id, board_id, node_id, folder_id, orig_name, mime, size, caption, tags, created_at "
             "FROM captures WHERE id = ?", (capture_id,),
         ).fetchone()
         if not cap:

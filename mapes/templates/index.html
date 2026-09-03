@@ -74,15 +74,16 @@
           <span id="zoom-label">100%</span>
           <button id="zoom-in-btn" class="icon-btn" title="Zoom in">+</button>
           <button id="zoom-fit-btn" class="btn-ghost" title="Fit all nodes on screen">Fit</button>
-          <button id="zoom-reset-btn" class="btn-ghost" title="Reset zoom">Reset</button>
         </div>
         <span class="toolbar-sep"></span>
-        <button id="add-note-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/note.png') }}" alt=""> Add note</button>
-        <button id="add-tasks-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/task.png') }}" alt=""> Tasks</button>
-        <button id="add-zone-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/zone.png') }}" alt=""> Zone</button>
-        <button id="add-table-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/table.png') }}" alt=""> Table</button>
-        <button id="connect-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/connect.png') }}" alt=""> Connect nodes</button>
-        <button id="delete-board-btn" class="btn-ghost danger"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/delete_board.png') }}" alt=""> Delete board</button>
+        <div class="toolbar-actions">
+          <button id="add-note-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/note.png') }}" alt=""> Add note</button>
+          <button id="add-tasks-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/task.png') }}" alt=""> Tasks</button>
+          <button id="add-zone-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/zone.png') }}" alt=""> Zone</button>
+          <button id="add-table-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/table.png') }}" alt=""> Table</button>
+          <button id="connect-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/connect.png') }}" alt=""> Connect nodes</button>
+          <button id="delete-board-btn" class="btn-ghost danger"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/delete_board.png') }}" alt=""> Delete board</button>
+        </div>
       </div>
       <div id="canvas-wrapper">
         <div id="canvas-sizer">
@@ -97,8 +98,10 @@
     <div id="vault-view" class="view-panel hidden">
       <div class="panel-toolbar">
         <button id="vault-upload-btn" class="btn-primary">+ Upload file</button>
+        <button id="vault-new-folder-btn" class="btn-secondary">+ New folder</button>
         <input id="vault-file-input" type="file" hidden>
       </div>
+      <div id="vault-breadcrumb" class="vault-breadcrumb"></div>
       <div id="vault-grid" class="vault-grid"></div>
     </div>
 
@@ -222,6 +225,7 @@
     </div>
     <div class="modal-actions">
       <button id="capture-delete" class="btn-danger">Delete</button>
+      <button id="capture-open-btn" class="btn-secondary" hidden>⭳ Open / Save as...</button>
       <div style="flex:1"></div>
       <button id="capture-cancel" class="btn-secondary">Close</button>
       <button id="capture-save" class="btn-primary">Save</button>

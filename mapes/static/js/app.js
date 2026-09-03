@@ -132,6 +132,8 @@ function renderBoardList() {
 async function loadBoard(boardId) {
   const board = state.boards.find((b) => b.id === boardId);
   $("#board-title").textContent = board ? board.name : "-";
+  vaultFolderId = null;
+  vaultFolderPath = [];
   state.nodes = await api(`/api/boards/${boardId}/nodes`);
   state.edges = await api(`/api/boards/${boardId}/edges`);
   state.nodeCounts = await api(`/api/boards/${boardId}/node-counts`);
@@ -208,7 +210,6 @@ canvasWrapper.addEventListener(
 
 $("#zoom-in-btn").onclick = () => setZoom(state.zoom + ZOOM_STEP);
 $("#zoom-out-btn").onclick = () => setZoom(state.zoom - ZOOM_STEP);
-$("#zoom-reset-btn").onclick = () => setZoom(1);
 
 $("#zoom-fit-btn").onclick = () => {
   if (!state.nodes.length) return;
@@ -1713,18 +1714,56 @@ function wireNodeChip(select, chipContainer) {
   sync();
 }
 
-// ---------- Vault (file attachments) ----------
+// ---------- Vault (file attachments + folders) ----------
 
 let editingCaptureId = null;
+let vaultFolderId = null;
+let vaultFolderPath = []; // [{id, name}, ...] from root to current folder
+
+const TEXT_PREVIEW_EXT = [".txt", ".md", ".markdown", ".csv", ".json", ".log", ".yml", ".yaml", ".xml", ".ini", ".cfg"];
+
+function isTextPreviewable(cap) {
+  if (cap.mime && cap.mime.startsWith("text/")) return true;
+  if (cap.mime === "application/json") return true;
+  const ext = (cap.orig_name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+  return TEXT_PREVIEW_EXT.includes(ext);
+}
 
 async function loadVault() {
-  const items = await api(`/api/boards/${state.currentBoardId}/captures`);
+  const [folders, items] = await Promise.all([
+    api(`/api/boards/${state.currentBoardId}/capture-folders${vaultFolderId ? `?parent_id=${vaultFolderId}` : ""}`),
+    api(`/api/boards/${state.currentBoardId}/captures${vaultFolderId ? `?folder_id=${vaultFolderId}` : ""}`),
+  ]);
+  renderVaultBreadcrumb();
   const grid = $("#vault-grid");
   grid.innerHTML = "";
-  if (!items.length) {
+  if (!folders.length && !items.length) {
     grid.innerHTML = `<div class="view-empty"><span class="view-empty-icon">🖼</span>No files yet - click "+ Upload file" above to add one.</div>`;
     return;
   }
+  folders.forEach((folder) => {
+    const card = document.createElement("div");
+    card.className = "vault-card vault-folder-card";
+    card.innerHTML = `
+      <div class="vault-thumb">📁</div>
+      <div class="vault-card-info">
+        <div class="vault-card-name">${escapeHtml(folder.name)}</div>
+        <div class="vault-card-meta">Folder</div>
+      </div>
+    `;
+    card.onclick = () => {
+      vaultFolderPath.push({ id: folder.id, name: folder.name });
+      vaultFolderId = folder.id;
+      loadVault();
+    };
+    card.oncontextmenu = async (e) => {
+      e.preventDefault();
+      if (!confirm(`Delete folder "${folder.name}" and everything inside it?`)) return;
+      await api(`/api/capture-folders/${folder.id}`, { method: "DELETE" });
+      await loadVault();
+    };
+    grid.appendChild(card);
+  });
   items.forEach((cap) => {
     const card = document.createElement("div");
     card.className = "vault-card";
@@ -1741,7 +1780,37 @@ async function loadVault() {
   });
 }
 
+function renderVaultBreadcrumb() {
+  const bar = $("#vault-breadcrumb");
+  const crumbs = [{ id: null, name: "Vault" }, ...vaultFolderPath];
+  bar.innerHTML = crumbs
+    .map((c, i) => {
+      const isLast = i === crumbs.length - 1;
+      return `<span class="vault-crumb${isLast ? " active" : ""}" data-i="${i}">${escapeHtml(c.name)}</span>`;
+    })
+    .join('<span class="vault-crumb-sep">/</span>');
+  bar.querySelectorAll(".vault-crumb").forEach((el) => {
+    el.onclick = () => {
+      const i = Number(el.dataset.i);
+      if (i === crumbs.length - 1) return;
+      vaultFolderPath = vaultFolderPath.slice(0, i);
+      vaultFolderId = i === 0 ? null : crumbs[i].id;
+      loadVault();
+    };
+  });
+}
+
 $("#vault-upload-btn").onclick = () => $("#vault-file-input").click();
+
+$("#vault-new-folder-btn").onclick = async () => {
+  const name = prompt("Folder name:", "New folder");
+  if (!name || !name.trim()) return;
+  await api(`/api/boards/${state.currentBoardId}/capture-folders`, {
+    method: "POST",
+    body: JSON.stringify({ name: name.trim(), parent_id: vaultFolderId }),
+  });
+  await loadVault();
+};
 
 $("#vault-file-input").addEventListener("change", async (e) => {
   const file = e.target.files[0];
@@ -1756,6 +1825,7 @@ $("#vault-file-input").addEventListener("change", async (e) => {
           data: reader.result,
           orig_name: file.name,
           mime: file.type || "application/octet-stream",
+          folder_id: vaultFolderId,
         }),
       });
       await loadVault();
@@ -1766,12 +1836,31 @@ $("#vault-file-input").addEventListener("change", async (e) => {
   reader.readAsDataURL(file);
 });
 
-function openCaptureModal(cap) {
+async function openCaptureModal(cap) {
   editingCaptureId = cap.id;
   const isImage = cap.mime && cap.mime.startsWith("image/");
-  $("#capture-preview").innerHTML = isImage
-    ? `<img src="/api/captures/${cap.id}/file">`
-    : `<div class="file-icon">📄 ${escapeHtml(cap.orig_name)}</div>`;
+  const isPdf = cap.mime === "application/pdf";
+  const fileUrl = `/api/captures/${cap.id}/file`;
+  const preview = $("#capture-preview");
+  if (isImage) {
+    preview.innerHTML = `<img src="${fileUrl}">`;
+  } else if (isPdf) {
+    preview.innerHTML = `<iframe class="capture-pdf-frame" src="${fileUrl}"></iframe>`;
+  } else if (isTextPreviewable(cap)) {
+    preview.innerHTML = `<pre class="capture-text-preview">Loading...</pre>`;
+    fetch(fileUrl)
+      .then((r) => r.text())
+      .then((text) => {
+        preview.querySelector(".capture-text-preview").textContent = text;
+      })
+      .catch(() => {
+        preview.querySelector(".capture-text-preview").textContent = "(couldn't load preview)";
+      });
+  } else {
+    preview.innerHTML = `<div class="file-icon">📄 ${escapeHtml(cap.orig_name)}</div>`;
+  }
+  $("#capture-open-btn").hidden = isImage;
+  $("#capture-open-btn").onclick = () => openExternalUrl(`${location.origin}${fileUrl}`);
   $("#capture-caption").value = cap.caption || "";
   $("#capture-tags").value = cap.tags || "";
   populateNodeSelect($("#capture-node"), cap.node_id);

@@ -589,6 +589,18 @@ button:disabled { opacity: .4; cursor: default; }
   outline-offset: -2px;
   background: var(--panel-3);
 }
+.table-del-row, .table-del-col {
+  border: none !important;
+  min-width: 20px !important;
+  width: 20px;
+  text-align: center;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: .5;
+  transition: opacity .12s ease, color .12s ease;
+}
+.table-del-row:hover, .table-del-col:hover { opacity: 1; color: var(--danger); }
+.table-col-controls td { padding: 2px 8px; font-size: 11px; }
 .node-table-controls { display: flex; gap: 6px; margin-top: 8px; }
 .node-table-controls button {
   width: auto;

@@ -720,13 +720,41 @@ function buildTableNodeEl(el, node) {
   gridEl.className = "node-table-grid";
 
   const renderGrid = () => {
-    gridEl.innerHTML = grid.map((row, ri) =>
+    const colCount = grid[0].length;
+    // A row of column-delete buttons on top, and a row-delete button at the
+    // end of each row - only shown when there's more than one to delete, so
+    // the table can't be emptied out entirely by accident.
+    const colHeader = colCount > 1
+      ? `<tr class="table-col-controls">${grid[0].map((_, ci) =>
+          `<td class="table-del-col" data-c="${ci}" title="Delete column">×</td>`
+        ).join("")}<td></td></tr>`
+      : "";
+    const rows = grid.map((row, ri) =>
       `<tr>${row.map((cell, ci) =>
         `<td contenteditable="true" data-r="${ri}" data-c="${ci}">${escapeHtml(cell)}</td>`
-      ).join("")}</tr>`
+      ).join("")}${grid.length > 1 ? `<td class="table-del-row" data-r="${ri}" title="Delete row">×</td>` : ""}</tr>`
     ).join("");
+    gridEl.innerHTML = colHeader + rows;
   };
   renderGrid();
+
+  gridEl.addEventListener("mousedown", (e) => {
+    if (e.target.closest(".table-del-row") || e.target.closest(".table-del-col")) e.preventDefault();
+  });
+  gridEl.addEventListener("click", async (e) => {
+    const delRow = e.target.closest(".table-del-row");
+    const delCol = e.target.closest(".table-del-col");
+    if (delRow && grid.length > 1) {
+      grid.splice(Number(delRow.dataset.r), 1);
+    } else if (delCol && grid[0].length > 1) {
+      const c = Number(delCol.dataset.c);
+      grid.forEach((row) => row.splice(c, 1));
+    } else {
+      return;
+    }
+    renderGrid();
+    await save();
+  });
 
   el.innerHTML = `
     <div class="node-header">

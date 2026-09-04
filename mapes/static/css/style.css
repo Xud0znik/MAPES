@@ -1016,6 +1016,16 @@ tr.empty-row td {
 .vault-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .vault-card-info { padding: 8px 10px; }
 .vault-card-name { font-size: 12px; font-weight: 600; word-break: break-word; }
+.vault-rename-input {
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
 .vault-card-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .capture-preview {
   max-width: 100%;

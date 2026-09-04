@@ -1744,6 +1744,39 @@ function decodeTextBuffer(buf) {
   return new TextDecoder("utf-8").decode(buf);
 }
 
+// Turns a card's name label into an editable text field right in place
+// (used by every "Rename" menu item) instead of a native prompt() dialog -
+// commits on Enter/blur, reverts on Escape.
+function startInlineRename(nameEl, currentValue, onSave) {
+  nameEl.innerHTML = "";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "vault-rename-input";
+  input.value = currentValue;
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (commit) => {
+    if (done) return;
+    done = true;
+    const val = input.value.trim();
+    if (commit && val && val !== currentValue) {
+      await onSave(val);
+    } else {
+      nameEl.textContent = currentValue;
+    }
+  };
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    else if (e.key === "Escape") { e.preventDefault(); done = true; nameEl.textContent = currentValue; }
+  });
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("mousedown", (e) => e.stopPropagation());
+}
+
 async function loadVault() {
   const [folders, items] = await Promise.all([
     api(`/api/boards/${state.currentBoardId}/capture-folders${vaultFolderId ? `?parent_id=${vaultFolderId}` : ""}`),
@@ -1790,10 +1823,10 @@ async function loadVault() {
       if (!action) return;
       menu.classList.add("hidden");
       if (action === "rename") {
-        const name = prompt("Rename folder:", folder.name);
-        if (!name || !name.trim() || name.trim() === folder.name) return;
-        await api(`/api/capture-folders/${folder.id}`, { method: "PATCH", body: JSON.stringify({ name: name.trim() }) });
-        await loadVault();
+        startInlineRename(card.querySelector(".vault-card-name"), folder.name, async (name) => {
+          await api(`/api/capture-folders/${folder.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+          await loadVault();
+        });
       } else if (action === "duplicate") {
         await api(`/api/capture-folders/${folder.id}/duplicate`, { method: "POST" });
         await loadVault();
@@ -1836,10 +1869,10 @@ async function loadVault() {
       if (!action) return;
       menu.classList.add("hidden");
       if (action === "rename") {
-        const name = prompt("Rename file:", cap.caption || cap.orig_name);
-        if (name === null || !name.trim()) return;
-        await api(`/api/captures/${cap.id}`, { method: "PATCH", body: JSON.stringify({ caption: name.trim() }) });
-        await loadVault();
+        startInlineRename(card.querySelector(".vault-card-name"), cap.caption || cap.orig_name, async (name) => {
+          await api(`/api/captures/${cap.id}`, { method: "PATCH", body: JSON.stringify({ caption: name }) });
+          await loadVault();
+        });
       } else if (action === "duplicate") {
         await api(`/api/captures/${cap.id}/duplicate`, { method: "POST" });
         await loadVault();

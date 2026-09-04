@@ -1001,13 +1001,19 @@ function renderEdges() {
     const ay = acy + uy * padA;
     const bx = bcx - ux * padB;
     const by = bcy - uy * padB;
-    // A gentle S-curve (control points pulled to the horizontal midpoint,
-    // each keeping its own endpoint's y) instead of a ruler-straight line -
-    // the same construction Miro/Notion/React Flow use, which stays smooth
-    // and readable no matter which direction the two nodes are from
-    // each other.
-    const midX = (ax + bx) / 2;
-    const d = `M ${ax} ${ay} C ${midX} ${ay}, ${midX} ${by}, ${bx} ${by}`;
+    // A gentle arc instead of a ruler-straight line. Control points are
+    // pulled mainly *along* the actual a->b direction (not forced
+    // horizontal - that made the curve leave each node sideways instead
+    // of toward the other one, so for a mostly-vertical connection it
+    // looked detached, ballooning out before curving back). A small
+    // perpendicular offset is what gives it the curve at all.
+    const bow = Math.min(dist * 0.25, 60);
+    const px = -uy, py = ux; // unit vector perpendicular to a->b
+    const c1x = ax + ux * bow + px * bow * 0.4;
+    const c1y = ay + uy * bow + py * bow * 0.4;
+    const c2x = bx - ux * bow + px * bow * 0.4;
+    const c2y = by - uy * bow + py * bow * 0.4;
+    const d = `M ${ax} ${ay} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${bx} ${by}`;
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
     line.setAttribute("d", d);

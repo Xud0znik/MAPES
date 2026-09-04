@@ -1001,23 +1001,28 @@ function renderEdges() {
     const ay = acy + uy * padA;
     const bx = bcx - ux * padB;
     const by = bcy - uy * padB;
+    // A gentle S-curve (control points pulled to the horizontal midpoint,
+    // each keeping its own endpoint's y) instead of a ruler-straight line -
+    // the same construction Miro/Notion/React Flow use, which stays smooth
+    // and readable no matter which direction the two nodes are from
+    // each other.
+    const midX = (ax + bx) / 2;
+    const d = `M ${ax} ${ay} C ${midX} ${ay}, ${midX} ${by}, ${bx} ${by}`;
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", ax);
-    line.setAttribute("y1", ay);
-    line.setAttribute("x2", bx);
-    line.setAttribute("y2", by);
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    line.setAttribute("d", d);
+    line.setAttribute("fill", "none");
     line.setAttribute("stroke", "#4f8cff");
     line.setAttribute("stroke-width", "2");
+    line.setAttribute("stroke-linecap", "round");
     line.setAttribute("opacity", "0.6");
     line.style.pointerEvents = "none";
-    // Invisible, much fatter line on top - the actual click/hover target, since
-    // hitting a 2px-wide diagonal line exactly with the mouse is unreasonably hard.
-    const hit = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    hit.setAttribute("x1", ax);
-    hit.setAttribute("y1", ay);
-    hit.setAttribute("x2", bx);
-    hit.setAttribute("y2", by);
+    // Invisible, much fatter copy of the same curve on top - the actual
+    // click/hover target, since hitting a 2px-wide curve exactly with the
+    // mouse is unreasonably hard.
+    const hit = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    hit.setAttribute("d", d);
+    hit.setAttribute("fill", "none");
     hit.setAttribute("stroke", "transparent");
     hit.setAttribute("stroke-width", "18");
     hit.style.pointerEvents = "stroke";
@@ -1804,8 +1809,40 @@ async function loadVault() {
         <div class="vault-card-name">${escapeHtml(cap.caption || cap.orig_name)}</div>
         <div class="vault-card-meta">${nodeTitle(cap.node_id) || "no node"}</div>
       </div>
+      <button type="button" class="vault-card-menu-btn" title="More">⋯</button>
+      <div class="vault-card-menu hidden">
+        <div class="vault-card-menu-item" data-action="rename">Rename</div>
+        <div class="vault-card-menu-item" data-action="duplicate">Duplicate</div>
+        <div class="vault-card-menu-item danger" data-action="delete">Delete</div>
+      </div>
     `;
     card.onclick = () => openCaptureModal(cap);
+    const menuBtn = card.querySelector(".vault-card-menu-btn");
+    const menu = card.querySelector(".vault-card-menu");
+    menuBtn.onclick = (e) => {
+      e.stopPropagation();
+      document.querySelectorAll(".vault-card-menu").forEach((m) => { if (m !== menu) m.classList.add("hidden"); });
+      menu.classList.toggle("hidden");
+    };
+    menu.onclick = async (e) => {
+      e.stopPropagation();
+      const action = e.target.closest(".vault-card-menu-item")?.dataset.action;
+      if (!action) return;
+      menu.classList.add("hidden");
+      if (action === "rename") {
+        const name = prompt("Rename file:", cap.caption || cap.orig_name);
+        if (name === null || !name.trim()) return;
+        await api(`/api/captures/${cap.id}`, { method: "PATCH", body: JSON.stringify({ caption: name.trim() }) });
+        await loadVault();
+      } else if (action === "duplicate") {
+        await api(`/api/captures/${cap.id}/duplicate`, { method: "POST" });
+        await loadVault();
+      } else if (action === "delete") {
+        if (!confirm(`Delete "${cap.caption || cap.orig_name}"?`)) return;
+        await api(`/api/captures/${cap.id}`, { method: "DELETE" });
+        await loadVault();
+      }
+    };
     grid.appendChild(card);
   });
 }

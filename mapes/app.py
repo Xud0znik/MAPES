@@ -287,11 +287,14 @@ def create_app():
             conn.commit()
         return "", 204
 
-    def _duplicate_capture_file(conn, cap, folder_id):
+    def _duplicate_capture_file(conn, cap, folder_id, rename=False):
+        caption = cap["caption"]
+        if rename:
+            caption = f"{caption} copy" if caption else caption
         cur = conn.execute(
             """INSERT INTO captures (board_id, node_id, folder_id, filename, orig_name, mime, size, caption, tags)
                VALUES (?, NULL, ?, '', ?, ?, ?, ?, ?)""",
-            (cap["board_id"], folder_id, cap["orig_name"], cap["mime"], cap["size"], cap["caption"], cap["tags"]),
+            (cap["board_id"], folder_id, cap["orig_name"], cap["mime"], cap["size"], caption, cap["tags"]),
         )
         new_id = cur.lastrowid
         ext = Path(cap["orig_name"]).suffix or (mimetypes.guess_extension(cap["mime"]) or "")
@@ -300,6 +303,7 @@ def create_app():
         if src.is_file():
             (db.captures_dir_for(cap["board_id"]) / filename).write_bytes(src.read_bytes())
         conn.execute("UPDATE captures SET filename = ? WHERE id = ?", (filename, new_id))
+        return new_id
 
     def _duplicate_folder_tree(conn, folder, parent_id, rename):
         name = f"{folder['name']} copy" if rename else folder["name"]
@@ -451,6 +455,20 @@ def create_app():
         if not cap:
             return jsonify({"error": "not found"}), 404
         return jsonify(dict(cap))
+
+    @app.post("/api/captures/<int:capture_id>/duplicate")
+    def duplicate_capture(capture_id):
+        conn = get_connection()
+        cap = conn.execute("SELECT * FROM captures WHERE id = ?", (capture_id,)).fetchone()
+        if not cap:
+            return jsonify({"error": "not found"}), 404
+        new_id = _duplicate_capture_file(conn, cap, cap["folder_id"], rename=True)
+        conn.commit()
+        row = conn.execute(
+            "SELECT id, board_id, node_id, folder_id, orig_name, mime, size, caption, tags, created_at "
+            "FROM captures WHERE id = ?", (new_id,),
+        ).fetchone()
+        return jsonify(dict(row)), 201
 
     @app.delete("/api/captures/<int:capture_id>")
     def delete_capture(capture_id):

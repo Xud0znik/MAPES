@@ -995,8 +995,18 @@ function renderEdges() {
     const dx = bcx - acx, dy = bcy - acy;
     const dist = Math.hypot(dx, dy) || 1;
     const ux = dx / dist, uy = dy / dist;
-    const padA = Math.min(a.offsetWidth / 2 + 6, dist / 2 - 2);
-    const padB = Math.min(b.offsetWidth / 2 + 6, dist / 2 - 2);
+    // Distance from a rectangle's center to its actual border along a given
+    // direction - using offsetWidth alone (as before) badly undershot the
+    // real edge for a mostly-vertical connection (it should follow height
+    // there instead), leaving the line stopping short with a visible gap
+    // above/below the node once it was tall or the connection was steep.
+    const rectExitDist = (halfW, halfH, dirX, dirY) => {
+      const tx = Math.abs(dirX) > 1e-6 ? halfW / Math.abs(dirX) : Infinity;
+      const ty = Math.abs(dirY) > 1e-6 ? halfH / Math.abs(dirY) : Infinity;
+      return Math.min(tx, ty);
+    };
+    const padA = Math.min(rectExitDist(a.offsetWidth / 2, a.offsetHeight / 2, ux, uy) + 6, dist / 2 - 2);
+    const padB = Math.min(rectExitDist(b.offsetWidth / 2, b.offsetHeight / 2, ux, uy) + 6, dist / 2 - 2);
     const ax = acx + ux * padA;
     const ay = acy + uy * padA;
     const bx = bcx - ux * padB;

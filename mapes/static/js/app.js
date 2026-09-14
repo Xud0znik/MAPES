@@ -977,6 +977,10 @@ function makeDraggable(el, node) {
   });
 }
 
+const EDGE_COLOR = "#4f8cff";
+const EDGE_WIDTH = "1.6";
+const EDGE_OPACITY = "0.45";
+
 function renderEdges() {
   hideEdgeTrash();
   edgesLayer.innerHTML = "";
@@ -1011,27 +1015,27 @@ function renderEdges() {
     const ay = acy + uy * padA;
     const bx = bcx - ux * padB;
     const by = bcy - uy * padB;
-    // A gentle arc instead of a ruler-straight line. Control points are
-    // pulled mainly *along* the actual a->b direction (not forced
-    // horizontal - that made the curve leave each node sideways instead
-    // of toward the other one, so for a mostly-vertical connection it
-    // looked detached, ballooning out before curving back). A small
-    // perpendicular offset is what gives it the curve at all.
-    const bow = Math.min(dist * 0.25, 60);
+    // A subtle arc instead of a ruler-straight line - just enough to read as
+    // "curved" without adding real bulge, since a bigger bow (what this used
+    // to be) makes a densely-connected board an unreadable tangle of
+    // crossing loops. Control points are pulled mainly *along* the actual
+    // a->b direction (not forced horizontal - that made the curve leave
+    // each node sideways instead of toward the other one).
+    const bow = Math.min(dist * 0.12, 28);
     const px = -uy, py = ux; // unit vector perpendicular to a->b
-    const c1x = ax + ux * bow + px * bow * 0.4;
-    const c1y = ay + uy * bow + py * bow * 0.4;
-    const c2x = bx - ux * bow + px * bow * 0.4;
-    const c2y = by - uy * bow + py * bow * 0.4;
+    const c1x = ax + ux * bow + px * bow * 0.25;
+    const c1y = ay + uy * bow + py * bow * 0.25;
+    const c2x = bx - ux * bow + px * bow * 0.25;
+    const c2y = by - uy * bow + py * bow * 0.25;
     const d = `M ${ax} ${ay} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${bx} ${by}`;
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     const line = document.createElementNS("http://www.w3.org/2000/svg", "path");
     line.setAttribute("d", d);
     line.setAttribute("fill", "none");
-    line.setAttribute("stroke", "#4f8cff");
-    line.setAttribute("stroke-width", "2");
+    line.setAttribute("stroke", EDGE_COLOR);
+    line.setAttribute("stroke-width", EDGE_WIDTH);
     line.setAttribute("stroke-linecap", "round");
-    line.setAttribute("opacity", "0.6");
+    line.setAttribute("opacity", EDGE_OPACITY);
     line.style.pointerEvents = "none";
     // Invisible, much fatter copy of the same curve on top - the actual
     // click/hover target, since hitting a 2px-wide curve exactly with the
@@ -1081,9 +1085,9 @@ function renderEdges() {
       }, 700);
     });
     hit.addEventListener("mouseleave", () => {
-      line.setAttribute("stroke", "#4f8cff");
-      line.setAttribute("stroke-width", "2");
-      line.setAttribute("opacity", "0.6");
+      line.setAttribute("stroke", EDGE_COLOR);
+      line.setAttribute("stroke-width", EDGE_WIDTH);
+      line.setAttribute("opacity", EDGE_OPACITY);
       if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
     });
     group.appendChild(line);

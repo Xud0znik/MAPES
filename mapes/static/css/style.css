@@ -328,6 +328,20 @@ button:disabled { opacity: .4; cursor: default; }
 }
 #board-toolbar button { width: auto; margin-top: 0; flex-shrink: 0; }
 #board-title { font-weight: 600; letter-spacing: .2px; flex-shrink: 0; }
+.board-filter-input {
+  width: 170px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  flex-shrink: 0;
+  margin-left: 14px;
+}
+.board-filter-input:focus { outline: none; border-color: var(--accent); }
+.node.filtered-out { opacity: 0.15; }
+#edges-layer.board-filtering { opacity: 0.5; }
 .toolbar-spacer { flex: 1; min-width: 12px; }
 
 /* A pill-shaped cluster that visually detaches the node-creation actions
@@ -480,6 +494,21 @@ button:disabled { opacity: .4; cursor: default; }
   border-radius: 10px 26px 10px 26px;
 }
 .node.selected { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 10px 26px 10px 26px; }
+
+/* Multi-select (rubber-band drag or shift-click) - a dashed outline so it
+   reads as a distinct thing from .selected's solid "connect from" ring. */
+.node.multi-selected {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px var(--accent-dim);
+}
+.selection-box {
+  position: fixed;
+  z-index: 400;
+  border: 1px solid var(--accent);
+  background: var(--accent-dim);
+  pointer-events: none;
+}
 
 /* Sticky-note look for "note" type nodes - warm paper tone + a slight tilt,
    closer to a real Post-it than the dark tech-card style used by the other

@@ -47,6 +47,9 @@
         <li>Click a node - edit it</li>
         <li>Ctrl/Alt + scroll - zoom</li>
         <li>Right-click a node - context menu</li>
+        <li>Drag over empty space - select several nodes</li>
+        <li>Shift+click - add/remove one node from selection</li>
+        <li>Delete/Backspace - delete the selected nodes</li>
         <li>Esc - close the node dialog</li>
       </ul>
     </details>
@@ -64,6 +67,7 @@
     <div id="board-view" class="view-panel">
       <div id="board-toolbar">
         <span id="board-title">-</span>
+        <input id="board-filter-input" type="text" class="board-filter-input" placeholder="🔍 Filter by tag...">
         <div class="toolbar-spacer"></div>
         <button id="undo-btn" class="icon-btn" title="Undo (Ctrl+Z)" disabled>↶</button>
         <button id="redo-btn" class="icon-btn" title="Redo (Ctrl+Y)" disabled>↷</button>

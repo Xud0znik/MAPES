@@ -13,6 +13,8 @@ const state = {
   minimizedImageIds: new Set(),
   editingNodeId: null,
   zoom: 1,
+  selectedNodeIds: new Set(),
+  boardFilterQuery: "",
 };
 
 const ZOOM_MIN = 0.3;
@@ -134,6 +136,9 @@ async function loadBoard(boardId) {
   $("#board-title").textContent = board ? board.name : "-";
   vaultFolderId = null;
   vaultFolderPath = [];
+  state.selectedNodeIds.clear();
+  state.boardFilterQuery = "";
+  $("#board-filter-input").value = "";
   state.nodes = await api(`/api/boards/${boardId}/nodes`);
   state.edges = await api(`/api/boards/${boardId}/edges`);
   state.nodeCounts = await api(`/api/boards/${boardId}/node-counts`);
@@ -376,6 +381,114 @@ canvas.addEventListener("click", async (e) => {
   if (quickText) startQuickNoteEdit(quickText, created);
 });
 
+// ---------- multi-select (rubber-band + shift-click) ----------
+
+function applyMultiSelectClass(id) {
+  const el = canvas.querySelector(`.node[data-id="${id}"]`);
+  if (el) el.classList.toggle("multi-selected", state.selectedNodeIds.has(id));
+}
+
+function clearMultiSelection() {
+  if (!state.selectedNodeIds.size) return;
+  state.selectedNodeIds.forEach((id) => applyMultiSelectClass(id));
+  state.selectedNodeIds.clear();
+  canvas.querySelectorAll(".node.multi-selected").forEach((n) => n.classList.remove("multi-selected"));
+}
+
+// Shift-click toggles a node in/out of the selection instead of opening its
+// edit modal - runs in the capture phase so it intercepts the click before
+// the node's own (bubble-phase) click handler ever sees it. A plain click
+// on a node clears any existing multi-selection (so a later single drag
+// doesn't unexpectedly drag a stale group) - but only when this click is a
+// real click and not the tail end of a drag that just moved the group.
+canvas.addEventListener("click", (e) => {
+  if (state.connectMode) return;
+  const nodeEl = e.target.closest(".node");
+  if (!nodeEl || nodeEl._dragMoved) return;
+  if (e.shiftKey) {
+    e.stopPropagation();
+    e.preventDefault();
+    const id = Number(nodeEl.dataset.id);
+    if (state.selectedNodeIds.has(id)) state.selectedNodeIds.delete(id);
+    else state.selectedNodeIds.add(id);
+    applyMultiSelectClass(id);
+    return;
+  }
+  if (state.selectedNodeIds.size) clearMultiSelection();
+}, true);
+
+// Drag a rectangle over empty canvas (or a zone's plain background) to
+// select every node it touches - held Shift adds to whatever was already
+// selected instead of replacing it. A plain click with no drag at all just
+// clears the selection, matching Miro/Figma-style canvases.
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || state.connectMode) return;
+  if (!isEmptyCanvasTarget(e.target)) return;
+  if (Object.values(PLACE_TOOLS).some((t) => state[t.stateKey])) return;
+  const additive = e.shiftKey;
+  const baseline = additive ? new Set(state.selectedNodeIds) : new Set();
+  if (!additive) clearMultiSelection();
+  const startX = e.clientX, startY = e.clientY;
+  const box = document.createElement("div");
+  box.className = "selection-box";
+  document.body.appendChild(box);
+
+  const update = (curX, curY) => {
+    const x1 = Math.min(startX, curX), y1 = Math.min(startY, curY);
+    const x2 = Math.max(startX, curX), y2 = Math.max(startY, curY);
+    box.style.left = `${x1}px`;
+    box.style.top = `${y1}px`;
+    box.style.width = `${x2 - x1}px`;
+    box.style.height = `${y2 - y1}px`;
+    const next = new Set(baseline);
+    canvas.querySelectorAll(".node").forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.left < x2 && r.right > x1 && r.top < y2 && r.bottom > y1) next.add(Number(el.dataset.id));
+    });
+    state.selectedNodeIds = next;
+    canvas.querySelectorAll(".node").forEach((el) => {
+      el.classList.toggle("multi-selected", state.selectedNodeIds.has(Number(el.dataset.id)));
+    });
+  };
+  update(startX, startY);
+
+  const onMove = (ev) => update(ev.clientX, ev.clientY);
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    box.remove();
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+});
+
+async function deleteSelectedNodes() {
+  const ids = [...state.selectedNodeIds];
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} selected node${ids.length > 1 ? "s" : ""} and their connections?`)) return;
+  const refs = ids.map((id) => state.nodes.find((n) => n.id === id)).filter(Boolean).map((n) => ({ ...n }));
+  await Promise.all(ids.map((id) => api(`/api/nodes/${id}`, { method: "DELETE" })));
+  state.nodes = state.nodes.filter((n) => !ids.includes(n.id));
+  state.edges = state.edges.filter((e) => !ids.includes(e.source_id) && !ids.includes(e.target_id));
+  state.selectedNodeIds.clear();
+  const actions = refs.map((ref) => makeDeleteNodeAction(ref));
+  pushHistory({
+    undo: async () => { for (const a of actions) await a.undo(); },
+    redo: async () => { for (const a of actions) await a.redo(); },
+  });
+  renderCanvas();
+  await refreshNodeCounts();
+}
+
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Delete" || e.key === "Backspace") && state.selectedNodeIds.size) {
+    const tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
+    e.preventDefault();
+    deleteSelectedNodes();
+  }
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && (state.addNoteMode || state.addTasksMode || state.addZoneMode || state.addTableMode)) {
     Object.values(PLACE_TOOLS).forEach((tool) => {
@@ -461,6 +574,11 @@ function renderCanvas() {
   if (state.connectSource && !state.nodes.some((n) => n.id === state.connectSource)) {
     state.connectSource = null;
   }
+  // Same idea for the multi-select set - and every element gets rebuilt
+  // below, so the .multi-selected class has to be reapplied afterward too.
+  for (const id of state.selectedNodeIds) {
+    if (!state.nodes.some((n) => n.id === id)) state.selectedNodeIds.delete(id);
+  }
   canvas.querySelectorAll(".node").forEach((n) => n.remove());
   // Zones render first (so they sit behind, via normal DOM stacking order)
   // and everything else on top of them, so nodes placed inside a zone stay
@@ -469,9 +587,45 @@ function renderCanvas() {
   const others = state.nodes.filter((n) => n.type !== "zone");
   zones.forEach((node) => canvas.appendChild(buildNodeEl(node)));
   others.forEach((node) => canvas.appendChild(buildNodeEl(node)));
+  canvas.querySelectorAll(".node").forEach((el) => {
+    el.classList.toggle("multi-selected", state.selectedNodeIds.has(Number(el.dataset.id)));
+  });
   renderEdges();
   canvasWrapper.classList.toggle("empty", state.nodes.length === 0);
+  applyBoardFilter(state.boardFilterQuery);
 }
+
+// A quick on-canvas filter (separate from the sidebar's cross-board search)
+// for finding things on *this* board by tag - dims everything that doesn't
+// match instead of hiding it outright, so the board's layout stays intact
+// and a partial/wrong query never looks like nodes went missing.
+function applyBoardFilter(query) {
+  state.boardFilterQuery = query;
+  const nodeEls = canvas.querySelectorAll(".node");
+  if (!query) {
+    nodeEls.forEach((el) => el.classList.remove("filtered-out"));
+    edgesLayer.classList.remove("board-filtering");
+    return;
+  }
+  edgesLayer.classList.add("board-filtering");
+  nodeEls.forEach((el) => {
+    const node = state.nodes.find((n) => String(n.id) === el.dataset.id);
+    const haystack = node ? `${node.tags || ""} ${node.title || ""}`.toLowerCase() : "";
+    el.classList.toggle("filtered-out", !haystack.includes(query));
+  });
+}
+
+$("#board-filter-input").addEventListener("input", (e) => {
+  applyBoardFilter(e.target.value.trim().toLowerCase());
+});
+$("#board-filter-input").addEventListener("keydown", (e) => {
+  e.stopPropagation();
+  if (e.key === "Escape") {
+    e.target.value = "";
+    applyBoardFilter("");
+    e.target.blur();
+  }
+});
 
 function buildNodeEl(node) {
   const el = document.createElement("div");
@@ -929,7 +1083,10 @@ function updateNodeBadges(el, node) {
 
 function makeDraggable(el, node) {
   let dragging = false;
-  let startX, startY, origLeft, origTop;
+  let startX, startY;
+  // Dragging a node that's part of the current multi-selection moves every
+  // selected node together, not just the one the mouse grabbed.
+  let group = []; // [{el, node, origLeft, origTop}]
   el._dragMoved = false;
 
   el.addEventListener("mousedown", (e) => {
@@ -938,8 +1095,15 @@ function makeDraggable(el, node) {
     el._dragMoved = false;
     startX = e.clientX;
     startY = e.clientY;
-    origLeft = parseFloat(el.style.left);
-    origTop = parseFloat(el.style.top);
+    const groupIds = state.selectedNodeIds.has(node.id) && state.selectedNodeIds.size > 1
+      ? [...state.selectedNodeIds]
+      : [node.id];
+    group = groupIds.map((id) => {
+      const groupEl = id === node.id ? el : canvas.querySelector(`.node[data-id="${id}"]`);
+      const groupNode = id === node.id ? node : state.nodes.find((n) => n.id === id);
+      if (!groupEl || !groupNode) return null;
+      return { el: groupEl, node: groupNode, origLeft: parseFloat(groupEl.style.left), origTop: parseFloat(groupEl.style.top) };
+    }).filter(Boolean);
     el.style.cursor = "grabbing";
     e.preventDefault();
   });
@@ -951,8 +1115,10 @@ function makeDraggable(el, node) {
     if (Math.abs(rawDx) > 3 || Math.abs(rawDy) > 3) el._dragMoved = true;
     const dx = rawDx / state.zoom;
     const dy = rawDy / state.zoom;
-    el.style.left = `${origLeft + dx}px`;
-    el.style.top = `${origTop + dy}px`;
+    group.forEach((g) => {
+      g.el.style.left = `${g.origLeft + dx}px`;
+      g.el.style.top = `${g.origTop + dy}px`;
+    });
     renderEdges();
   });
 
@@ -960,25 +1126,31 @@ function makeDraggable(el, node) {
     if (!dragging) return;
     dragging = false;
     el.style.cursor = "grab";
-    if (!el._dragMoved) return;
-    const x = parseFloat(el.style.left);
-    const y = parseFloat(el.style.top);
-    const from = { x: origLeft, y: origTop };
-    const to = { x, y };
-    node.x = x;
-    node.y = y;
-    await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify(to) });
+    if (!el._dragMoved) { group = []; return; }
+    const moves = group.map((g) => {
+      const to = { x: parseFloat(g.el.style.left), y: parseFloat(g.el.style.top) };
+      const from = { x: g.origLeft, y: g.origTop };
+      g.node.x = to.x;
+      g.node.y = to.y;
+      return { node: g.node, el: g.el, from, to };
+    });
+    group = [];
+    await Promise.all(moves.map((m) => api(`/api/nodes/${m.node.id}`, { method: "PUT", body: JSON.stringify(m.to) })));
     pushHistory({
       undo: async () => {
-        node.x = from.x; node.y = from.y;
-        el.style.left = `${from.x}px`; el.style.top = `${from.y}px`;
-        await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify(from) });
+        await Promise.all(moves.map((m) => {
+          m.node.x = m.from.x; m.node.y = m.from.y;
+          m.el.style.left = `${m.from.x}px`; m.el.style.top = `${m.from.y}px`;
+          return api(`/api/nodes/${m.node.id}`, { method: "PUT", body: JSON.stringify(m.from) });
+        }));
         renderEdges();
       },
       redo: async () => {
-        node.x = to.x; node.y = to.y;
-        el.style.left = `${to.x}px`; el.style.top = `${to.y}px`;
-        await api(`/api/nodes/${node.id}`, { method: "PUT", body: JSON.stringify(to) });
+        await Promise.all(moves.map((m) => {
+          m.node.x = m.to.x; m.node.y = m.to.y;
+          m.el.style.left = `${m.to.x}px`; m.el.style.top = `${m.to.y}px`;
+          return api(`/api/nodes/${m.node.id}`, { method: "PUT", body: JSON.stringify(m.to) });
+        }));
         renderEdges();
       },
     });
@@ -1162,6 +1334,7 @@ $("#connect-btn").onclick = () => {
   state.connectSource = null;
   $("#connect-btn").classList.toggle("active", state.connectMode);
   canvas.querySelectorAll(".node.selected").forEach((n) => n.classList.remove("selected"));
+  clearMultiSelection();
 };
 
 async function handleConnectClick(nodeId, el) {

@@ -91,8 +91,11 @@ Drive, Dropbox, etc). It accepts either a folder or a direct path to a `.db` fil
 MAPES_DATA_DIR="/path/to/folder-or-file.db" python mapes.py
 ```
 
-The `data` folder isn't committed to git (see `.gitignore`). For a backup, just copy
-the `mapes.db` file, or use "Save As" right in the app.
+The `data` folder isn't committed to git (see `.gitignore`). For a full backup, copy
+the whole `data` folder (not just `mapes.db`) - it also holds `captures/` and
+`secret.key`, the key that decrypts Credentials secrets; "Save As" only copies the
+`.db` file itself, so a credential's secret won't decrypt in the copy unless
+`secret.key` moves there too.
 
 ### Using MAPES on more than one device
 
@@ -112,25 +115,25 @@ files don't handle two processes writing to them concurrently over a network sha
 - Freely drag nodes around the canvas, zoom (Ctrl/Alt + scroll), position is saved
 - Connections between nodes ("Connect nodes" button → click two nodes)
 - Tags and node color, right-click to duplicate/delete
-- Search by title/content/tags within a board
-- Export/import a board as JSON
+- Multi-select: drag over empty space (or a zone's plain body) to rubber-band select,
+  Ctrl+click to add/remove one node, move/delete several at once
+- Search by title/content/tags within a board, plus a quick on-canvas tag filter that
+  dims everything that doesn't match instead of hiding it
+- Export/import a board as JSON, or export it as a PNG snapshot of the diagram
 
-Plus four sections on top of the board (functionally in the spirit of
+Plus three sections on top of the board (functionally in the spirit of
 [atlas-audit](https://github.com/Zoyma/atlas-audit), adapted to MAPES's general-purpose,
 not just pentest-specific, model):
 
-- **🖼 Vault** - file/screenshot storage. Upload a file, optionally link it to a node,
-  caption it, tag it. Files live on disk next to the database
-  (`data/captures/<board-id>/`) - not copied along with the database via "Save As",
-  which only copies the .db.
+- **🖼 Vault** - file/screenshot storage, with folders. Upload a file (or a whole local
+  folder), optionally link it to a node, caption it, tag it. Files live on disk next
+  to the database (`data/captures/<board-id>/`) - not copied along with the database
+  via "Save As", which only copies the .db.
 - **🔑 Credentials** - accounts/passwords/hashes/keys linked to nodes. The secret is
-  encrypted at rest (ChaCha20-Poly1305, with the key in a separate `secret.key` file
-  next to the app, not in git). This protects against the database file itself
-  leaking accidentally, not a full master-password vault - MAPES has no login by
-  design (see "What's next" below).
-- **⚑ Findings** - a list of findings/issues with severity (crit/high/med/low/info)
-  and status (open/fixed/accepted risk), linked to a node, with
-  description/impact/PoC/remediation/references.
+  encrypted at rest (ChaCha20-Poly1305, with the key in `secret.key` next to the
+  database, not in git). This protects against the database file itself leaking
+  accidentally, not a full master-password vault - MAPES has no login by design (see
+  "What's next" below).
 - **▤ Reports** - markdown notes/reports with a live preview (a small built-in
   renderer: headings, lists, quotes, code, **bold**/*italic*, links) and export to
   `.md`.
@@ -147,9 +150,10 @@ mapes/
   templates/index.html  page markup
   static/css/style.css  styles
   static/js/app.js      canvas, tabs, modals, markdown preview logic
+  static/js/vendor/     vendored third-party JS (html2canvas, for image export)
 packaging/mapes.spec    PyInstaller config for building the .exe
 .github/workflows/      auto-builds MAPES.exe on GitHub Actions
-data/                   created at runtime: mapes.db + captures/ (not in git)
+data/                   created at runtime: mapes.db + captures/ + secret.key (not in git)
 ```
 
 ## What's next

@@ -32,10 +32,11 @@
     <div id="file-status" class="file-status"></div>
 
     <details class="collapsible">
-      <summary>⇄ Export / import JSON</summary>
+      <summary>⇄ Export / Import</summary>
       <button id="export-btn" class="btn-secondary">⭳ Export board to JSON</button>
       <button id="import-btn" class="btn-secondary">⭱ Import board from JSON</button>
       <input id="import-file" type="file" accept="application/json" hidden>
+      <button id="export-image-btn" class="btn-secondary">🖼 Export board as PNG</button>
     </details>
 
     <details class="collapsible">
@@ -280,6 +281,7 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/vendor/html2canvas.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

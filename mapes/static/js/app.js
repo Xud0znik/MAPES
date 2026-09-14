@@ -326,6 +326,17 @@ $("#add-zone-btn").onclick = () => armPlaceTool("zone");
 // written report; this is a freeform grid meant for the map itself).
 $("#add-table-btn").onclick = () => armPlaceTool("table");
 
+// A brief pop-in on a freshly created node - just enough to draw the eye to
+// where it landed. renderCanvas() rebuilds every node element from scratch,
+// so this only ever plays once per node: this call's element is gone by
+// the next unrelated render, taking the class with it.
+function animateNodeIn(id) {
+  const el = canvas.querySelector(`.node[data-id="${id}"]`);
+  if (!el) return;
+  el.classList.add("node-pop-in");
+  el.addEventListener("animationend", () => el.classList.remove("node-pop-in"), { once: true });
+}
+
 canvas.addEventListener("click", async (e) => {
   if (!isEmptyCanvasTarget(e.target)) return;
   if (!state.addNoteMode && !state.addTasksMode && !state.addZoneMode && !state.addTableMode) return;
@@ -341,6 +352,7 @@ canvas.addEventListener("click", async (e) => {
     state.nodes.push(created);
     pushHistory(makeCreateNodeAction(created));
     renderCanvas();
+    animateNodeIn(created.id);
     return;
   }
   if (state.addTableMode) {
@@ -356,6 +368,7 @@ canvas.addEventListener("click", async (e) => {
     state.nodes.push(created);
     pushHistory(makeCreateNodeAction(created));
     renderCanvas();
+    animateNodeIn(created.id);
     return;
   }
   if (state.addTasksMode) {
@@ -366,6 +379,7 @@ canvas.addEventListener("click", async (e) => {
     state.nodes.push(created);
     pushHistory(makeCreateNodeAction(created));
     renderCanvas();
+    animateNodeIn(created.id);
     const addInput = canvas.querySelector(`.node[data-id="${created.id}"] .node-task-add`);
     if (addInput) addInput.focus();
     return;
@@ -377,6 +391,7 @@ canvas.addEventListener("click", async (e) => {
   state.nodes.push(created);
   pushHistory(makeCreateNodeAction(created));
   renderCanvas();
+  animateNodeIn(created.id);
   const quickText = canvas.querySelector(`.node[data-id="${created.id}"] .node-quick-text`);
   if (quickText) startQuickNoteEdit(quickText, created);
 });
@@ -572,6 +587,7 @@ document.addEventListener("paste", async (e) => {
       state.nodes.push(created);
       pushHistory(makeCreateNodeAction(created));
       renderCanvas();
+      animateNodeIn(created.id);
     };
     img.src = dataUrl;
   };
@@ -1803,6 +1819,99 @@ $("#import-file").addEventListener("change", async (e) => {
   renderCanvas();
 });
 
+// ---------- export board as image ----------
+
+// Renders the board (nodes + connections) to a PNG, cropped to whatever
+// area actually has content instead of the full 3000x2000 canvas - for
+// dropping a snapshot of a diagram into a report. Positions/sizes are
+// already stored in the canvas's own unzoomed pixel space (the current
+// zoom is just a CSS transform on #canvas-content), so this reads them
+// straight off the DOM regardless of the current zoom/scroll position.
+// Uses html2canvas (vendored in static/js/vendor/) rather than the classic
+// "serialize to SVG + foreignObject + drawImage" trick, which Chromium
+// treats as tainting the destination canvas the moment a foreignObject was
+// involved at all - blocking the very toBlob()/toDataURL() call the export
+// needs, even with purely same-origin content.
+async function exportBoardAsImage() {
+  const nodeEls = [...canvas.querySelectorAll(".node")];
+  if (!nodeEls.length) {
+    alert("This board is empty - nothing to export.");
+    return;
+  }
+
+  const PAD = 60;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  nodeEls.forEach((el) => {
+    const x = parseFloat(el.style.left) || 0;
+    const y = parseFloat(el.style.top) || 0;
+    // A zone's title label pokes out above its own top edge.
+    const topExtra = el.classList.contains("node-zone-card") ? 24 : 0;
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y - topExtra);
+    maxX = Math.max(maxX, x + el.offsetWidth);
+    maxY = Math.max(maxY, y + el.offsetHeight);
+  });
+  minX -= PAD; minY -= PAD; maxX += PAD; maxY += PAD;
+  const width = Math.ceil(maxX - minX);
+  const height = Math.ceil(maxY - minY);
+  const bg = getComputedStyle(canvasWrapper).backgroundColor || "#0d0f14";
+
+  // html2canvas needs the element actually laid out in the document to read
+  // computed styles from - build an off-screen (not display:none, which
+  // has no layout at all) holder sized to just the cropped region, with a
+  // translated clone of the canvas positioned so the crop starts at 0,0.
+  const holder = document.createElement("div");
+  holder.style.cssText = `position:fixed; top:0; left:-99999px; width:${width}px; height:${height}px; overflow:hidden; background:${bg};`;
+  const contentClone = canvasContent.cloneNode(true);
+  contentClone.style.transform = `translate(${-minX}px, ${-minY}px)`;
+  contentClone.querySelectorAll(".selection-box, .edge-trash-btn").forEach((el) => el.remove());
+  contentClone.querySelectorAll(".multi-selected").forEach((el) => el.classList.remove("multi-selected"));
+  contentClone.querySelectorAll(".filtered-out").forEach((el) => el.classList.remove("filtered-out"));
+  holder.appendChild(contentClone);
+  document.body.appendChild(holder);
+
+  const btn = $("#export-image-btn");
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Exporting...";
+  try {
+    const rendered = await html2canvas(holder, { backgroundColor: bg, width, height, scale: 2 });
+    const board = state.boards.find((b) => b.id === state.currentBoardId);
+    const filename = `${(board?.name || "mapes-board").replace(/[^\w\-]+/g, "_")}.png`;
+
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.pick_export_image_file) {
+      const path = await window.pywebview.api.pick_export_image_file(filename);
+      if (!path) return;
+      const dataUrl = rendered.toDataURL("image/png");
+      const result = await window.pywebview.api.write_binary_file(path, dataUrl.split(",")[1]);
+      if (result !== true) alert(`Could not write the file: ${result}`);
+      return;
+    }
+
+    await new Promise((resolve) => {
+      rendered.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        resolve();
+      }, "image/png");
+    });
+  } catch (err) {
+    alert("Couldn't export the board as an image.");
+  } finally {
+    holder.remove();
+    btn.disabled = false;
+    btn.textContent = originalLabel;
+  }
+}
+
+$("#export-image-btn").onclick = () => exportBoardAsImage();
+
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -2338,7 +2447,7 @@ async function loadCreds() {
   const tbody = $("#creds-tbody");
   tbody.innerHTML = "";
   if (!items.length) {
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="6">🔑 No credentials yet - click "+ Credential" above to add one.</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="6"><div class="view-empty"><span class="view-empty-icon">🔑</span>No credentials yet - click "+ Credential" above to add one.</div></td></tr>`;
     return;
   }
   items.forEach((cred) => {
@@ -2448,6 +2557,9 @@ async function loadDocs() {
   const items = await api(`/api/boards/${state.currentBoardId}/docs`);
   const list = $("#doc-list");
   list.innerHTML = "";
+  if (!items.length) {
+    list.innerHTML = `<div class="view-empty compact"><span class="view-empty-icon">▤</span>No reports yet - click "+ New report" above.</div>`;
+  }
   items.forEach((d) => {
     const div = document.createElement("div");
     div.className = "doc-item" + (d.id === currentDocId ? " active" : "");

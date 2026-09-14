@@ -12,6 +12,7 @@ done at any time right in the UI (the "File" section in the sidebar).
 Opens its own window (pywebview); if pywebview isn't installed, the app
 just opens in a browser tab on localhost instead.
 """
+import base64
 import os
 import socket
 import subprocess
@@ -109,6 +110,10 @@ class Api:
         """For "Export .md" - pick a destination .md file."""
         return self._pick_export_file(default_name, "report.md", "Markdown", "*.md")
 
+    def pick_export_image_file(self, default_name):
+        """For "Export board as image" - pick a destination .png file."""
+        return self._pick_export_file(default_name, "mapes-board.png", "PNG image", "*.png")
+
     def _pick_export_file(self, default_name, fallback_name, filter_label, filter_pattern):
         """Native app windows (pywebview) don't reliably support a plain
         HTML <a download>/<a href> click the way a real browser tab does -
@@ -138,6 +143,17 @@ class Api:
         with pick_export_json_file()."""
         try:
             Path(path).write_text(content, encoding="utf-8")
+            return True
+        except Exception as exc:
+            return f"error: {exc}"
+
+    def write_binary_file(self, path, base64_data):
+        """Write base64-encoded binary content to an arbitrary path - used
+        together with pick_export_image_file() for the board PNG export
+        (pywebview's JS bridge only carries JSON-safe values, so the PNG
+        bytes cross it as a base64 string)."""
+        try:
+            Path(path).write_bytes(base64.b64decode(base64_data))
             return True
         except Exception as exc:
             return f"error: {exc}"

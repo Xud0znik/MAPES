@@ -270,8 +270,17 @@ document.addEventListener("keydown", (e) => {
 const canvas = $("#canvas");
 const edgesLayer = $("#edges-layer");
 
+// A Zone sits behind other nodes but is still its own element in #canvas -
+// clicking its plain background (not the label/resize-handle, which have
+// their own handlers that stopPropagation) should count as "empty space"
+// too, so a node/tool can be placed straight into a zone instead of always
+// needing to be created outside it and dragged in.
+function isEmptyCanvasTarget(target) {
+  return target === canvas || target.classList.contains("node-zone-card");
+}
+
 canvas.addEventListener("dblclick", async (e) => {
-  if (e.target !== canvas) return;
+  if (!isEmptyCanvasTarget(e.target)) return;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / state.zoom;
   const y = (e.clientY - rect.top) / state.zoom;
@@ -313,7 +322,7 @@ $("#add-zone-btn").onclick = () => armPlaceTool("zone");
 $("#add-table-btn").onclick = () => armPlaceTool("table");
 
 canvas.addEventListener("click", async (e) => {
-  if (e.target !== canvas) return;
+  if (!isEmptyCanvasTarget(e.target)) return;
   if (!state.addNoteMode && !state.addTasksMode && !state.addZoneMode && !state.addTableMode) return;
   const rect = canvas.getBoundingClientRect();
   const x = (e.clientX - rect.left) / state.zoom - 95;

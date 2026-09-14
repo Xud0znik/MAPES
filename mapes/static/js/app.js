@@ -381,7 +381,7 @@ canvas.addEventListener("click", async (e) => {
   if (quickText) startQuickNoteEdit(quickText, created);
 });
 
-// ---------- multi-select (rubber-band + shift-click) ----------
+// ---------- multi-select (rubber-band + ctrl-click) ----------
 
 function applyMultiSelectClass(id) {
   const el = canvas.querySelector(`.node[data-id="${id}"]`);
@@ -395,7 +395,14 @@ function clearMultiSelection() {
   canvas.querySelectorAll(".node.multi-selected").forEach((n) => n.classList.remove("multi-selected"));
 }
 
-// Shift-click toggles a node in/out of the selection instead of opening its
+// Set right after a rubber-band drag that actually moved, so the trailing
+// "click" event it produces (browsers fire one after any mouseup, even
+// following a drag) doesn't wipe out the selection the drag just made -
+// e.g. releasing on top of a node, or on a zone's resize handle, would
+// otherwise immediately clear what was just selected.
+let marqueeDragMoved = false;
+
+// Ctrl+click toggles a node in/out of the selection instead of opening its
 // edit modal - runs in the capture phase so it intercepts the click before
 // the node's own (bubble-phase) click handler ever sees it. A plain click
 // on a node clears any existing multi-selection (so a later single drag
@@ -403,9 +410,10 @@ function clearMultiSelection() {
 // real click and not the tail end of a drag that just moved the group.
 canvas.addEventListener("click", (e) => {
   if (state.connectMode) return;
+  if (marqueeDragMoved) { marqueeDragMoved = false; return; }
   const nodeEl = e.target.closest(".node");
   if (!nodeEl || nodeEl._dragMoved) return;
-  if (e.shiftKey) {
+  if (e.ctrlKey || e.metaKey) {
     e.stopPropagation();
     e.preventDefault();
     const id = Number(nodeEl.dataset.id);
@@ -418,22 +426,24 @@ canvas.addEventListener("click", (e) => {
 }, true);
 
 // Drag a rectangle over empty canvas (or a zone's plain background) to
-// select every node it touches - held Shift adds to whatever was already
+// select every node it touches - held Ctrl adds to whatever was already
 // selected instead of replacing it. A plain click with no drag at all just
 // clears the selection, matching Miro/Figma-style canvases.
 canvas.addEventListener("mousedown", (e) => {
   if (e.button !== 0 || state.connectMode) return;
   if (!isEmptyCanvasTarget(e.target)) return;
   if (Object.values(PLACE_TOOLS).some((t) => state[t.stateKey])) return;
-  const additive = e.shiftKey;
+  const additive = e.ctrlKey || e.metaKey;
   const baseline = additive ? new Set(state.selectedNodeIds) : new Set();
   if (!additive) clearMultiSelection();
   const startX = e.clientX, startY = e.clientY;
+  let moved = false;
   const box = document.createElement("div");
   box.className = "selection-box";
   document.body.appendChild(box);
 
   const update = (curX, curY) => {
+    if (Math.abs(curX - startX) > 3 || Math.abs(curY - startY) > 3) moved = true;
     const x1 = Math.min(startX, curX), y1 = Math.min(startY, curY);
     const x2 = Math.max(startX, curX), y2 = Math.max(startY, curY);
     box.style.left = `${x1}px`;
@@ -457,6 +467,7 @@ canvas.addEventListener("mousedown", (e) => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
     box.remove();
+    marqueeDragMoved = moved;
   };
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
@@ -788,9 +799,12 @@ const ZONE_MIN_W = 120;
 const ZONE_MIN_H = 90;
 
 // Zone nodes: a big dashed rectangle drawn behind other nodes to visually
-// group ones about the same topic - drag the body to move it, its corner
-// to resize, and click the label to rename/recolor it (reuses the normal
-// node modal, same as any other node type).
+// group ones about the same topic - drag its label (title bar) to move it,
+// its corner to resize, and click the label to rename/recolor it (reuses
+// the normal node modal, same as any other node type). The plain body is
+// deliberately NOT a drag handle - it stays "empty canvas" so a rubber-band
+// drag started inside the zone selects the nodes in it instead of moving
+// the zone itself.
 function buildZoneNodeEl(el, node) {
   el.classList.add("node-zone-card");
   const w = node.width || 320;
@@ -801,7 +815,7 @@ function buildZoneNodeEl(el, node) {
     <div class="zone-label">${escapeHtml(node.title)}</div>
     <div class="zone-resize-handle" title="Drag to resize"></div>
   `;
-  makeDraggable(el, node);
+  makeDraggable(el, node, { handle: el.querySelector(".zone-label") });
 
   el.querySelector(".zone-label").addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1081,7 +1095,11 @@ function updateNodeBadges(el, node) {
   badgesEl.innerHTML = parts.join("");
 }
 
-function makeDraggable(el, node) {
+function makeDraggable(el, node, opts = {}) {
+  // A drag handle can be given separately from the node's own element (a
+  // Zone drags from its title label, not from anywhere in its plain body -
+  // that body needs to stay free for rubber-band-selecting nodes inside it).
+  const handle = opts.handle || el;
   let dragging = false;
   let startX, startY;
   // Dragging a node that's part of the current multi-selection moves every
@@ -1089,7 +1107,7 @@ function makeDraggable(el, node) {
   let group = []; // [{el, node, origLeft, origTop}]
   el._dragMoved = false;
 
-  el.addEventListener("mousedown", (e) => {
+  handle.addEventListener("mousedown", (e) => {
     if (state.connectMode || e.button !== 0) return;
     dragging = true;
     el._dragMoved = false;
@@ -1104,7 +1122,7 @@ function makeDraggable(el, node) {
       if (!groupEl || !groupNode) return null;
       return { el: groupEl, node: groupNode, origLeft: parseFloat(groupEl.style.left), origTop: parseFloat(groupEl.style.top) };
     }).filter(Boolean);
-    el.style.cursor = "grabbing";
+    handle.style.cursor = "grabbing";
     e.preventDefault();
   });
 
@@ -1125,7 +1143,7 @@ function makeDraggable(el, node) {
   window.addEventListener("mouseup", async () => {
     if (!dragging) return;
     dragging = false;
-    el.style.cursor = "grab";
+    handle.style.cursor = "grab";
     if (!el._dragMoved) { group = []; return; }
     const moves = group.map((g) => {
       const to = { x: parseFloat(g.el.style.left), y: parseFloat(g.el.style.top) };

@@ -8,18 +8,45 @@ import os
 
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 
+from . import db
 from .paths import app_dir
 
-KEY_PATH = app_dir() / "secret.key"
 PREFIX = "enc:v1:"
+
+# The key lives next to mapes.db/captures/ (db.DATA_DIR - looked up fresh on
+# every call, since db.configure() can repoint it after this module is
+# imported), not next to the app - everything a board needs (its data,
+# attachments, and the key that decrypts its credential secrets) has to
+# move together if the data folder ever does (Save As, MAPES_DATA_DIR, a
+# different machine). _legacy_key_path() is where it used to live, kept
+# only so an existing install migrates its key in place instead of losing
+# access to already-encrypted secrets.
+def _key_path():
+    return db.DATA_DIR / "secret.key"
+
+
+def _legacy_key_path():
+    return app_dir() / "secret.key"
 
 
 def _load_key():
-    if KEY_PATH.exists():
-        return KEY_PATH.read_bytes()
+    path = _key_path()
+    if path.exists():
+        return path.read_bytes()
+    legacy = _legacy_key_path()
+    if legacy != path and legacy.exists():
+        try:
+            key = legacy.read_bytes()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(key)
+            legacy.unlink(missing_ok=True)
+            return key
+        except OSError:
+            return legacy.read_bytes()
     key = os.urandom(32)
     try:
-        KEY_PATH.write_bytes(key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(key)
     except OSError:
         pass
     return key

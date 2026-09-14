@@ -113,7 +113,7 @@ files don't handle two processes writing to them concurrently over a network sha
 - Multiple boards, each its own independent space of nodes
 - Different node types: note, host/server, account/password, link, file/path, other
 - Freely drag nodes around the canvas, zoom (Ctrl/Alt + scroll), position is saved
-- Connections between nodes ("Connect nodes" button → click two nodes)
+- Connections between nodes - drag from a node's edge dot to another node
 - Tags and node color, right-click to duplicate/delete
 - Multi-select: drag over empty space (or a zone's plain body) to rubber-band select,
   Ctrl+click to add/remove one node, move/delete several at once

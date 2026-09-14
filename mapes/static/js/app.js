@@ -4,8 +4,6 @@ const state = {
   nodes: [],
   edges: [],
   nodeCounts: {},
-  connectMode: false,
-  connectSource: null,
   addNoteMode: false,
   addTasksMode: false,
   addZoneMode: false,
@@ -496,7 +494,6 @@ let marqueeDragMoved = false;
 // doesn't unexpectedly drag a stale group) - but only when this click is a
 // real click and not the tail end of a drag that just moved the group.
 canvas.addEventListener("click", (e) => {
-  if (state.connectMode) return;
   if (marqueeDragMoved) { marqueeDragMoved = false; return; }
   const nodeEl = e.target.closest(".node");
   if (!nodeEl || nodeEl._dragMoved) return;
@@ -517,7 +514,7 @@ canvas.addEventListener("click", (e) => {
 // selected instead of replacing it. A plain click with no drag at all just
 // clears the selection, matching Miro/Figma-style canvases.
 canvas.addEventListener("mousedown", (e) => {
-  if (e.button !== 0 || state.connectMode) return;
+  if (e.button !== 0) return;
   if (!isEmptyCanvasTarget(e.target)) return;
   if (Object.values(PLACE_TOOLS).some((t) => state[t.stateKey])) return;
   const additive = e.ctrlKey || e.metaKey;
@@ -667,14 +664,10 @@ document.addEventListener("paste", async (e) => {
 });
 
 function renderCanvas() {
-  // A node picked as the "connect from" source may have just been deleted
-  // (directly, or via undo/redo) - drop the stale selection so a later click
-  // can't try to create an edge from/to a node id that no longer exists.
-  if (state.connectSource && !state.nodes.some((n) => n.id === state.connectSource)) {
-    state.connectSource = null;
-  }
-  // Same idea for the multi-select set - and every element gets rebuilt
-  // below, so the .multi-selected class has to be reapplied afterward too.
+  // A node in the multi-select set may have just been deleted (directly, or
+  // via undo/redo) - drop the stale id so a later action can't try to act
+  // on a node that no longer exists. Every element gets rebuilt below, so
+  // the .multi-selected class has to be reapplied afterward too.
   for (const id of state.selectedNodeIds) {
     if (!state.nodes.some((n) => n.id === id)) state.selectedNodeIds.delete(id);
   }
@@ -791,11 +784,7 @@ function buildNodeEl(node) {
       el._dragMoved = false;
       return;
     }
-    if (state.connectMode) {
-      handleConnectClick(node.id, el);
-    } else {
-      openNodeModal(node);
-    }
+    openNodeModal(node);
   });
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -873,8 +862,7 @@ function buildTasksNodeEl(el, node) {
   el.querySelector(".node-header").addEventListener("click", (e) => {
     e.stopPropagation();
     if (el._dragMoved) { el._dragMoved = false; return; }
-    if (state.connectMode) handleConnectClick(node.id, el);
-    else openNodeModal(node);
+    openNodeModal(node);
   });
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -909,8 +897,7 @@ function buildZoneNodeEl(el, node) {
   el.querySelector(".zone-label").addEventListener("click", (e) => {
     e.stopPropagation();
     if (el._dragMoved) { el._dragMoved = false; return; }
-    if (state.connectMode) handleConnectClick(node.id, el);
-    else openNodeModal(node);
+    openNodeModal(node);
   });
 
   const handle = el.querySelector(".zone-resize-handle");
@@ -1050,8 +1037,7 @@ function buildTableNodeEl(el, node) {
   el.querySelector(".node-header").addEventListener("click", (e) => {
     e.stopPropagation();
     if (el._dragMoved) { el._dragMoved = false; return; }
-    if (state.connectMode) handleConnectClick(node.id, el);
-    else openNodeModal(node);
+    openNodeModal(node);
   });
   el.addEventListener("contextmenu", (e) => {
     e.preventDefault();
@@ -1197,7 +1183,7 @@ function makeDraggable(el, node, opts = {}) {
   el._dragMoved = false;
 
   handle.addEventListener("mousedown", (e) => {
-    if (state.connectMode || e.button !== 0) return;
+    if (e.button !== 0) return;
     dragging = true;
     el._dragMoved = false;
     startX = e.clientX;
@@ -1434,18 +1420,9 @@ document.addEventListener("mousedown", (e) => {
   if (edgeTrashEl && e.target !== edgeTrashEl) hideEdgeTrash();
 });
 
-// ---------- connect mode ----------
+// ---------- connecting nodes ----------
 
-$("#connect-btn").onclick = () => {
-  state.connectMode = !state.connectMode;
-  state.connectSource = null;
-  $("#connect-btn").classList.toggle("active", state.connectMode);
-  canvas.querySelectorAll(".node.selected").forEach((n) => n.classList.remove("selected"));
-  clearMultiSelection();
-};
-
-// Shared by "Connect nodes" mode and dragging from a node's edge handle -
-// creates the edge, wires it into the canvas, and records one undo/redo
+// Creates the edge, wires it into the canvas, and records one undo/redo
 // step for it. Returns the created edge, or null if the request failed.
 async function createEdgeWithHistory(sourceId, targetId) {
   const edge = await api(`/api/boards/${state.currentBoardId}/edges`, {
@@ -1477,36 +1454,17 @@ async function createEdgeWithHistory(sourceId, targetId) {
   return edge;
 }
 
-async function handleConnectClick(nodeId, el) {
-  if (!state.connectSource) {
-    state.connectSource = nodeId;
-    el.classList.add("selected");
-    return;
-  }
-  if (state.connectSource === nodeId) {
-    el.classList.remove("selected");
-    state.connectSource = null;
-    return;
-  }
-  const sourceId = state.connectSource;
-  canvas.querySelectorAll(".node.selected").forEach((n) => n.classList.remove("selected"));
-  state.connectSource = null;
-  await createEdgeWithHistory(sourceId, nodeId);
-}
-
 // ---------- drag-to-connect (from a node's edge handle) ----------
 
 // A small dot on each side of a node, visible on hover - drag from one to
-// another node to connect them, instead of "Connect nodes" mode's click
-// twice. Both ways of connecting stay available; this is just faster for
-// one-off connections.
+// another node to connect them.
 function attachConnectHandles(el, node) {
   ["top", "right", "bottom", "left"].forEach((side) => {
     const handle = document.createElement("div");
     handle.className = `node-connect-handle node-connect-handle-${side}`;
     handle.title = "Drag to connect to another node";
     handle.addEventListener("mousedown", (e) => {
-      if (e.button !== 0 || state.connectMode) return;
+      if (e.button !== 0) return;
       e.stopPropagation();
       e.preventDefault();
       startConnectDrag(node);

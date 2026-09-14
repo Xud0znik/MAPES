@@ -237,7 +237,6 @@ button:disabled { opacity: .4; cursor: default; }
 }
 .icon-btn:hover { background: var(--panel-3); }
 
-#connect-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 #add-note-btn.active { background: #ffd86b26; color: #ffd86b; border-color: #ffd86b; }
 #add-tasks-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 #add-zone-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
@@ -517,11 +516,8 @@ button:disabled { opacity: .4; cursor: default; }
   transform: translateY(-2px);
   border-radius: 10px 26px 10px 26px;
 }
-.node.selected { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 10px 26px 10px 26px; }
-
 /* Drag-to-connect: a small dot per side, only visible on hover, that starts
-   a connection when dragged onto another node - a faster alternative to
-   "Connect nodes" mode's click-twice for one-off connections. */
+   a connection when dragged onto another node. */
 .node-connect-handle {
   position: absolute;
   width: 11px;
@@ -544,7 +540,7 @@ button:disabled { opacity: .4; cursor: default; }
 .node.connect-drop-target { outline: 2px solid #ff9f4d; outline-offset: 3px; }
 
 /* Multi-select (rubber-band drag or Ctrl+click) - a dashed outline so it
-   reads as a distinct thing from .selected's solid "connect from" ring. */
+   reads as a distinct thing from .connect-drop-target's solid ring. */
 .node.multi-selected {
   outline: 2px dashed var(--accent);
   outline-offset: 3px;

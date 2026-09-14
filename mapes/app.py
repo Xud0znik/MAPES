@@ -551,72 +551,6 @@ def create_app():
         conn.commit()
         return "", 204
 
-    # ---------- findings ----------
-
-    _SEVERITY_ORDER = "CASE severity WHEN 'crit' THEN 0 WHEN 'high' THEN 1 WHEN 'med' THEN 2 WHEN 'low' THEN 3 ELSE 4 END"
-
-    @app.get("/api/boards/<int:board_id>/findings")
-    def list_findings(board_id):
-        conn = get_connection()
-        rows = conn.execute(
-            f"SELECT * FROM findings WHERE board_id = ? ORDER BY {_SEVERITY_ORDER}, id DESC", (board_id,),
-        ).fetchall()
-        return jsonify([dict(r) for r in rows])
-
-    @app.post("/api/boards/<int:board_id>/findings")
-    def create_finding(board_id):
-        data = request.get_json(force=True) or {}
-        title = (data.get("title") or "Untitled").strip()
-        conn = get_connection()
-        cur = conn.execute(
-            """INSERT INTO findings (board_id, node_id, title, description, impact, poc,
-               remediation, refs, severity, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (
-                board_id,
-                data.get("node_id") or None,
-                title,
-                data.get("description", ""),
-                data.get("impact", ""),
-                data.get("poc", ""),
-                data.get("remediation", ""),
-                data.get("refs", ""),
-                data.get("severity", "info"),
-                data.get("status", "open"),
-            ),
-        )
-        conn.commit()
-        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (cur.lastrowid,)).fetchone()
-        return jsonify(dict(finding)), 201
-
-    @app.patch("/api/findings/<int:finding_id>")
-    def update_finding(finding_id):
-        data = request.get_json(force=True) or {}
-        conn = get_connection()
-        fields = {}
-        for key in ("node_id", "title", "description", "impact", "poc", "remediation",
-                    "refs", "severity", "status"):
-            if key in data:
-                fields[key] = data[key]
-        if fields:
-            set_clause = ", ".join(f"{k} = ?" for k in fields)
-            conn.execute(
-                f"UPDATE findings SET {set_clause}, updated_at = datetime('now') WHERE id = ?",
-                (*fields.values(), finding_id),
-            )
-            conn.commit()
-        finding = conn.execute("SELECT * FROM findings WHERE id = ?", (finding_id,)).fetchone()
-        if not finding:
-            return jsonify({"error": "not found"}), 404
-        return jsonify(dict(finding))
-
-    @app.delete("/api/findings/<int:finding_id>")
-    def delete_finding(finding_id):
-        conn = get_connection()
-        conn.execute("DELETE FROM findings WHERE id = ?", (finding_id,))
-        conn.commit()
-        return "", 204
-
     # ---------- reports (docs) ----------
 
     @app.get("/api/boards/<int:board_id>/docs")
@@ -758,7 +692,7 @@ def create_app():
             return jsonify({"error": f"Could not save: {exc}"}), 400
         return jsonify({"path": linked})
 
-    # ---------- node badge counts (vault/creds/findings per node) ----------
+    # ---------- node badge counts (vault/creds per node) ----------
 
     @app.get("/api/boards/<int:board_id>/node-counts")
     def node_counts(board_id):
@@ -772,12 +706,11 @@ def create_app():
                 (board_id,),
             ).fetchall()
             for r in rows:
-                counts.setdefault(str(r["node_id"]), {"captures": 0, "creds": 0, "findings": 0})
+                counts.setdefault(str(r["node_id"]), {"captures": 0, "creds": 0})
                 counts[str(r["node_id"])][table] = r["c"]
 
         _tally("captures")
         _tally("creds")
-        _tally("findings")
         return jsonify(counts)
 
     # ---------- search ----------

@@ -916,7 +916,7 @@ function updateNodeBadges(el, node) {
   const counts = state.nodeCounts[String(node.id)];
   const badgesEl = el.querySelector(".node-badges");
   if (!badgesEl) return;
-  if (!counts || (!counts.captures && !counts.creds && !counts.findings)) {
+  if (!counts || (!counts.captures && !counts.creds)) {
     badgesEl.style.display = "none";
     return;
   }
@@ -924,7 +924,6 @@ function updateNodeBadges(el, node) {
   const parts = [];
   if (counts.captures) parts.push(`<span class="node-badge"><img src="/static/img/icons/vault.png" alt=""> ${counts.captures}</span>`);
   if (counts.creds) parts.push(`<span class="node-badge"><img src="/static/img/icons/credentials.png" alt=""> ${counts.creds}</span>`);
-  if (counts.findings) parts.push(`<span class="node-badge"><img src="/static/img/icons/findings.png" alt=""> ${counts.findings}</span>`);
   badgesEl.innerHTML = parts.join("");
 }
 
@@ -1692,7 +1691,7 @@ $("#file-save-btn").onclick = async () => {
   }
 };
 
-// ---------- view tabs (Board / Vault / Credentials / Findings / Reports) ----------
+// ---------- view tabs (Board / Vault / Credentials / Reports) ----------
 
 state.currentView = "board";
 
@@ -1712,7 +1711,6 @@ async function refreshCurrentView() {
   if (!state.currentBoardId) return;
   if (state.currentView === "vault") await loadVault();
   else if (state.currentView === "creds") await loadCreds();
-  else if (state.currentView === "findings") await loadFindings();
   else if (state.currentView === "reports") await loadDocs();
 }
 
@@ -2251,84 +2249,6 @@ $("#cred-delete").onclick = async () => {
   await refreshNodeCounts();
 };
 
-// ---------- Findings ----------
-
-let editingFindingId = null;
-const SEVERITY_LABEL = { crit: "Critical", high: "High", med: "Medium", low: "Low", info: "Info" };
-
-async function loadFindings() {
-  const items = await api(`/api/boards/${state.currentBoardId}/findings`);
-  const list = $("#findings-list");
-  list.innerHTML = "";
-  if (!items.length) {
-    list.innerHTML = `<div class="view-empty"><span class="view-empty-icon">⚑</span>No findings yet - click "+ Finding" above to add one.</div>`;
-    return;
-  }
-  items.forEach((f) => {
-    const card = document.createElement("div");
-    card.className = `finding-card ${f.severity}`;
-    card.innerHTML = `
-      <span class="severity-badge ${f.severity}">${SEVERITY_LABEL[f.severity] || f.severity}</span>
-      <span class="finding-title">${escapeHtml(f.title)}</span>
-      <span class="finding-node">${escapeHtml(nodeTitle(f.node_id))}</span>
-      <span class="status-badge ${f.status}">${escapeHtml(f.status)}</span>
-    `;
-    card.onclick = () => openFindingModal(f);
-    list.appendChild(card);
-  });
-}
-
-$("#findings-add-btn").onclick = () => openFindingModal(null);
-
-function openFindingModal(f) {
-  editingFindingId = f ? f.id : null;
-  $("#finding-modal-title").textContent = f ? "Edit finding" : "New finding";
-  $("#finding-title").value = f ? f.title : "";
-  $("#finding-severity").value = f ? f.severity : "info";
-  $("#finding-status").value = f ? f.status : "open";
-  $("#finding-description").value = f ? f.description : "";
-  $("#finding-impact").value = f ? f.impact : "";
-  $("#finding-poc").value = f ? f.poc : "";
-  $("#finding-remediation").value = f ? f.remediation : "";
-  $("#finding-refs").value = f ? f.refs : "";
-  populateNodeSelect($("#finding-node"), f ? f.node_id : null);
-  wireNodeChip($("#finding-node"), $("#finding-node-chip"));
-  $("#finding-delete").style.display = f ? "inline-block" : "none";
-  $("#finding-modal").classList.remove("hidden", "minimized");
-}
-
-$("#finding-cancel").onclick = () => $("#finding-modal").classList.add("hidden");
-
-$("#finding-save").onclick = async () => {
-  const payload = {
-    title: $("#finding-title").value.trim() || "Untitled",
-    severity: $("#finding-severity").value,
-    status: $("#finding-status").value,
-    description: $("#finding-description").value,
-    impact: $("#finding-impact").value,
-    poc: $("#finding-poc").value,
-    remediation: $("#finding-remediation").value,
-    refs: $("#finding-refs").value,
-    node_id: $("#finding-node").value || null,
-  };
-  if (editingFindingId) {
-    await api(`/api/findings/${editingFindingId}`, { method: "PATCH", body: JSON.stringify(payload) });
-  } else {
-    await api(`/api/boards/${state.currentBoardId}/findings`, { method: "POST", body: JSON.stringify(payload) });
-  }
-  $("#finding-modal").classList.add("hidden");
-  await loadFindings();
-  await refreshNodeCounts();
-};
-
-$("#finding-delete").onclick = async () => {
-  if (!editingFindingId || !confirm("Delete this finding?")) return;
-  await api(`/api/findings/${editingFindingId}`, { method: "DELETE" });
-  $("#finding-modal").classList.add("hidden");
-  await loadFindings();
-  await refreshNodeCounts();
-};
-
 // ---------- Reports (markdown docs) ----------
 
 let currentDocId = null;
@@ -2639,7 +2559,6 @@ const MODAL_CANCEL_BTN = {
   "node-modal": "node-cancel",
   "capture-modal": "capture-cancel",
   "cred-modal": "cred-cancel",
-  "finding-modal": "finding-cancel",
 };
 
 document.addEventListener("click", (e) => {

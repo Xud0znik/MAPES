@@ -1037,6 +1037,22 @@ function renderEdges() {
     line.setAttribute("stroke-linecap", "round");
     line.setAttribute("opacity", EDGE_OPACITY);
     line.style.pointerEvents = "none";
+    // A small solid dot right where the line actually meets each node - at
+    // 0.45 opacity a thin line fading into a node's border reads as
+    // "floating nearby" rather than "attached", especially once several
+    // lines converge on the same corner. The dot is unambiguous.
+    const dotA = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dotA.setAttribute("cx", ax);
+    dotA.setAttribute("cy", ay);
+    dotA.setAttribute("r", "3.5");
+    dotA.setAttribute("fill", EDGE_COLOR);
+    dotA.style.pointerEvents = "none";
+    const dotB = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dotB.setAttribute("cx", bx);
+    dotB.setAttribute("cy", by);
+    dotB.setAttribute("r", "3.5");
+    dotB.setAttribute("fill", EDGE_COLOR);
+    dotB.style.pointerEvents = "none";
     // Invisible, much fatter copy of the same curve on top - the actual
     // click/hover target, since hitting a 2px-wide curve exactly with the
     // mouse is unreasonably hard.
@@ -1076,6 +1092,8 @@ function renderEdges() {
       line.setAttribute("stroke", "#ff5f6d");
       line.setAttribute("stroke-width", "3");
       line.setAttribute("opacity", "0.95");
+      dotA.setAttribute("fill", "#ff5f6d");
+      dotB.setAttribute("fill", "#ff5f6d");
     });
     hit.addEventListener("mousemove", (e) => {
       if (hoverTimer || edgeTrashEl) return;
@@ -1088,9 +1106,13 @@ function renderEdges() {
       line.setAttribute("stroke", EDGE_COLOR);
       line.setAttribute("stroke-width", EDGE_WIDTH);
       line.setAttribute("opacity", EDGE_OPACITY);
+      dotA.setAttribute("fill", EDGE_COLOR);
+      dotB.setAttribute("fill", EDGE_COLOR);
       if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
     });
     group.appendChild(line);
+    group.appendChild(dotA);
+    group.appendChild(dotB);
     group.appendChild(hit);
     edgesLayer.appendChild(group);
   });

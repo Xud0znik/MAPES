@@ -242,6 +242,7 @@ button:disabled { opacity: .4; cursor: default; }
 #add-tasks-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 #add-zone-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 #add-table-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+#minimap-toggle-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 #canvas-wrapper.note-tool-active #canvas { cursor: text; }
 
 .help { color: var(--muted); font-size: 12px; padding-left: 16px; line-height: 1.7; margin: 8px 0 0; }
@@ -393,6 +394,24 @@ button:disabled { opacity: .4; cursor: default; }
   background-attachment: fixed, scroll, scroll;
 }
 
+/* A sibling of #canvas-wrapper (not a child of it) positioned against
+   #board-view instead - an absolutely positioned child of the scrollable
+   #canvas-wrapper itself would scroll away with the content along with
+   everything else in it, rather than staying pinned to the visible corner. */
+#minimap {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 50;
+  background: rgba(18, 21, 28, .88);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+#minimap.hidden { display: none; }
+#minimap-canvas { display: block; cursor: pointer; border-radius: 5px; }
+
 #canvas-sizer {
   position: relative;
 }
@@ -500,7 +519,31 @@ button:disabled { opacity: .4; cursor: default; }
 }
 .node.selected { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 10px 26px 10px 26px; }
 
-/* Multi-select (rubber-band drag or shift-click) - a dashed outline so it
+/* Drag-to-connect: a small dot per side, only visible on hover, that starts
+   a connection when dragged onto another node - a faster alternative to
+   "Connect nodes" mode's click-twice for one-off connections. */
+.node-connect-handle {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--node-color, var(--accent));
+  border: 2px solid var(--panel);
+  opacity: 0;
+  transform: scale(.6);
+  transition: opacity .12s ease, transform .12s ease;
+  cursor: crosshair;
+  z-index: 5;
+}
+.node:hover .node-connect-handle { opacity: .9; transform: scale(1); }
+.node-connect-handle:hover { opacity: 1 !important; transform: scale(1.25) !important; }
+.node-connect-handle-top { top: -5px; left: 50%; margin-left: -5.5px; }
+.node-connect-handle-bottom { bottom: -5px; left: 50%; margin-left: -5.5px; }
+.node-connect-handle-left { left: -5px; top: 50%; margin-top: -5.5px; }
+.node-connect-handle-right { right: -5px; top: 50%; margin-top: -5.5px; }
+.node.connect-drop-target { outline: 2px solid #ff9f4d; outline-offset: 3px; }
+
+/* Multi-select (rubber-band drag or Ctrl+click) - a dashed outline so it
    reads as a distinct thing from .selected's solid "connect from" ring. */
 .node.multi-selected {
   outline: 2px dashed var(--accent);
@@ -941,7 +984,7 @@ button:disabled { opacity: .4; cursor: default; }
 
 .view-panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .view-panel.hidden { display: none; }
-#board-view { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#board-view { flex: 1; display: flex; flex-direction: column; min-height: 0; position: relative; }
 
 .panel-toolbar {
   display: flex;

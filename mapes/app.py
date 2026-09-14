@@ -1,5 +1,6 @@
 import base64
 import binascii
+import io
 import mimetypes
 import re
 import sqlite3
@@ -691,6 +692,22 @@ def create_app():
         except OSError as exc:
             return jsonify({"error": f"Could not save: {exc}"}), 400
         return jsonify({"path": linked})
+
+    @app.get("/api/system/backup-zip")
+    def backup_zip():
+        """Download the whole data folder (mapes.db + captures/ + secret.key)
+        as one .zip - browser-tab fallback for "Backup as .zip"; the desktop
+        app writes the zip directly to a native-picked path instead (see
+        Api.backup_data_zip in mapes.py), since it doesn't need to round-trip
+        the bytes through HTTP at all."""
+        buf = io.BytesIO()
+        db.backup_zip_into(buf)
+        buf.seek(0)
+        return Response(
+            buf.read(),
+            mimetype="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="mapes-backup.zip"'},
+        )
 
     # ---------- node badge counts (vault/creds per node) ----------
 

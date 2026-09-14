@@ -196,6 +196,7 @@ function applyZoom() {
   canvasSizer.style.width = `${BASE_W * state.zoom}px`;
   canvasSizer.style.height = `${BASE_H * state.zoom}px`;
   $("#zoom-label").textContent = `${Math.round(state.zoom * 100)}%`;
+  renderMinimap();
 }
 
 function setZoom(z) {
@@ -215,6 +216,77 @@ canvasWrapper.addEventListener(
 
 $("#zoom-in-btn").onclick = () => setZoom(state.zoom + ZOOM_STEP);
 $("#zoom-out-btn").onclick = () => setZoom(state.zoom - ZOOM_STEP);
+
+// ---------- minimap ----------
+
+const minimapEl = $("#minimap");
+const minimapCanvas = $("#minimap-canvas");
+const minimapCtx = minimapCanvas.getContext("2d");
+const MM_W = minimapCanvas.width;
+const MM_H = minimapCanvas.height;
+// Uniform scale (not stretched) so a square node stays square in the map -
+// whichever axis is tighter (BASE_W x BASE_H is much wider than tall)
+// decides it, leaving a small unused margin on the other axis.
+const MM_SCALE = Math.min(MM_W / BASE_W, MM_H / BASE_H);
+
+state.minimapVisible = true;
+
+function renderMinimap() {
+  if (!state.minimapVisible) return;
+  minimapCtx.clearRect(0, 0, MM_W, MM_H);
+  state.nodes.forEach((node) => {
+    const el = canvas.querySelector(`.node[data-id="${node.id}"]`);
+    const w = el ? el.offsetWidth : (node.width || 190);
+    const h = el ? el.offsetHeight : (node.height || 80);
+    const mx = node.x * MM_SCALE, my = node.y * MM_SCALE;
+    const mw = Math.max(2, w * MM_SCALE), mh = Math.max(2, h * MM_SCALE);
+    if (node.type === "zone") {
+      minimapCtx.strokeStyle = node.color || "#5b8cff";
+      minimapCtx.lineWidth = 1;
+      minimapCtx.strokeRect(mx, my, mw, mh);
+    } else {
+      minimapCtx.fillStyle = node.color || "#4f8cff";
+      minimapCtx.fillRect(mx, my, mw, mh);
+    }
+  });
+
+  const vx = (canvasWrapper.scrollLeft / state.zoom) * MM_SCALE;
+  const vy = (canvasWrapper.scrollTop / state.zoom) * MM_SCALE;
+  const vw = (canvasWrapper.clientWidth / state.zoom) * MM_SCALE;
+  const vh = (canvasWrapper.clientHeight / state.zoom) * MM_SCALE;
+  minimapCtx.strokeStyle = "#ffffff";
+  minimapCtx.lineWidth = 1.5;
+  minimapCtx.strokeRect(vx, vy, vw, vh);
+}
+
+function jumpMinimapTo(clientX, clientY) {
+  const rect = minimapCanvas.getBoundingClientRect();
+  const logicalX = (clientX - rect.left) / MM_SCALE;
+  const logicalY = (clientY - rect.top) / MM_SCALE;
+  canvasWrapper.scrollLeft = logicalX * state.zoom - canvasWrapper.clientWidth / 2;
+  canvasWrapper.scrollTop = logicalY * state.zoom - canvasWrapper.clientHeight / 2;
+}
+
+minimapCanvas.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  jumpMinimapTo(e.clientX, e.clientY);
+  const onMove = (ev) => jumpMinimapTo(ev.clientX, ev.clientY);
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+});
+
+canvasWrapper.addEventListener("scroll", () => renderMinimap());
+
+$("#minimap-toggle-btn").onclick = () => {
+  state.minimapVisible = !state.minimapVisible;
+  minimapEl.classList.toggle("hidden", !state.minimapVisible);
+  $("#minimap-toggle-btn").classList.toggle("active", state.minimapVisible);
+  if (state.minimapVisible) renderMinimap();
+};
 
 applyZoom();
 
@@ -620,6 +692,7 @@ function renderCanvas() {
   renderEdges();
   canvasWrapper.classList.toggle("empty", state.nodes.length === 0);
   applyBoardFilter(state.boardFilterQuery);
+  renderMinimap();
 }
 
 // A quick on-canvas filter (separate from the sidebar's cross-board search)
@@ -669,16 +742,16 @@ function buildNodeEl(node) {
   const isTable = node.type === "table";
 
   if (isImage) {
-    return buildImageNodeEl(el, node);
+    return attachConnectHandles(buildImageNodeEl(el, node), node);
   }
   if (isTasks) {
-    return buildTasksNodeEl(el, node);
+    return attachConnectHandles(buildTasksNodeEl(el, node), node);
   }
   if (isZone) {
-    return buildZoneNodeEl(el, node);
+    return attachConnectHandles(buildZoneNodeEl(el, node), node);
   }
   if (isTable) {
-    return buildTableNodeEl(el, node);
+    return attachConnectHandles(buildTableNodeEl(el, node), node);
   }
 
   const action = QUICK_ACTIONS[node.type];
@@ -729,7 +802,7 @@ function buildNodeEl(node) {
     e.stopPropagation();
     openContextMenu(e.clientX, e.clientY, node);
   });
-  return el;
+  return attachConnectHandles(el, node);
 }
 
 // Task-list nodes: a small checklist right on the board, connectable to
@@ -1371,6 +1444,39 @@ $("#connect-btn").onclick = () => {
   clearMultiSelection();
 };
 
+// Shared by "Connect nodes" mode and dragging from a node's edge handle -
+// creates the edge, wires it into the canvas, and records one undo/redo
+// step for it. Returns the created edge, or null if the request failed.
+async function createEdgeWithHistory(sourceId, targetId) {
+  const edge = await api(`/api/boards/${state.currentBoardId}/edges`, {
+    method: "POST",
+    body: JSON.stringify({ source_id: sourceId, target_id: targetId }),
+  }).catch((e) => {
+    alert(e.message);
+    return null;
+  });
+  if (!edge) return null;
+  state.edges.push(edge);
+  renderEdges();
+  pushHistory({
+    undo: async () => {
+      await api(`/api/edges/${edge.id}`, { method: "DELETE" });
+      state.edges = state.edges.filter((x) => x.id !== edge.id);
+      renderEdges();
+    },
+    redo: async () => {
+      const recreated = await api(`/api/boards/${state.currentBoardId}/edges`, {
+        method: "POST",
+        body: JSON.stringify({ source_id: edge.source_id, target_id: edge.target_id, label: edge.label }),
+      });
+      edge.id = recreated.id;
+      state.edges.push(recreated);
+      renderEdges();
+    },
+  });
+  return edge;
+}
+
 async function handleConnectClick(nodeId, el) {
   if (!state.connectSource) {
     state.connectSource = nodeId;
@@ -1382,35 +1488,82 @@ async function handleConnectClick(nodeId, el) {
     state.connectSource = null;
     return;
   }
-  const edge = await api(`/api/boards/${state.currentBoardId}/edges`, {
-    method: "POST",
-    body: JSON.stringify({ source_id: state.connectSource, target_id: nodeId }),
-  }).catch((e) => {
-    alert(e.message);
-    return null;
-  });
+  const sourceId = state.connectSource;
   canvas.querySelectorAll(".node.selected").forEach((n) => n.classList.remove("selected"));
   state.connectSource = null;
-  if (edge) {
-    state.edges.push(edge);
-    renderEdges();
-    pushHistory({
-      undo: async () => {
-        await api(`/api/edges/${edge.id}`, { method: "DELETE" });
-        state.edges = state.edges.filter((x) => x.id !== edge.id);
-        renderEdges();
-      },
-      redo: async () => {
-        const recreated = await api(`/api/boards/${state.currentBoardId}/edges`, {
-          method: "POST",
-          body: JSON.stringify({ source_id: edge.source_id, target_id: edge.target_id, label: edge.label }),
-        });
-        edge.id = recreated.id;
-        state.edges.push(recreated);
-        renderEdges();
-      },
+  await createEdgeWithHistory(sourceId, nodeId);
+}
+
+// ---------- drag-to-connect (from a node's edge handle) ----------
+
+// A small dot on each side of a node, visible on hover - drag from one to
+// another node to connect them, instead of "Connect nodes" mode's click
+// twice. Both ways of connecting stay available; this is just faster for
+// one-off connections.
+function attachConnectHandles(el, node) {
+  ["top", "right", "bottom", "left"].forEach((side) => {
+    const handle = document.createElement("div");
+    handle.className = `node-connect-handle node-connect-handle-${side}`;
+    handle.title = "Drag to connect to another node";
+    handle.addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || state.connectMode) return;
+      e.stopPropagation();
+      e.preventDefault();
+      startConnectDrag(node);
     });
-  }
+    el.appendChild(handle);
+  });
+  return el;
+}
+
+function startConnectDrag(sourceNode) {
+  const rect = canvas.getBoundingClientRect();
+  const sourceEl = canvas.querySelector(`.node[data-id="${sourceNode.id}"]`);
+  if (!sourceEl) return;
+  const scx = parseFloat(sourceEl.style.left) + sourceEl.offsetWidth / 2;
+  const scy = parseFloat(sourceEl.style.top) + sourceEl.offsetHeight / 2;
+
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", scx);
+  line.setAttribute("y1", scy);
+  line.setAttribute("x2", scx);
+  line.setAttribute("y2", scy);
+  line.setAttribute("stroke", "#ff9f4d");
+  line.setAttribute("stroke-width", "2");
+  line.setAttribute("stroke-dasharray", "6 4");
+  line.style.pointerEvents = "none";
+  edgesLayer.appendChild(line);
+
+  let targetEl = null;
+  const clearTarget = () => {
+    if (targetEl) targetEl.classList.remove("connect-drop-target");
+    targetEl = null;
+  };
+  const onMove = (ev) => {
+    const cx = (ev.clientX - rect.left) / state.zoom;
+    const cy = (ev.clientY - rect.top) / state.zoom;
+    line.setAttribute("x2", cx);
+    line.setAttribute("y2", cy);
+    const hovered = document.elementFromPoint(ev.clientX, ev.clientY);
+    const nodeEl = hovered && hovered.closest(".node");
+    const isValidTarget = nodeEl && Number(nodeEl.dataset.id) !== sourceNode.id;
+    if (targetEl && targetEl !== nodeEl) clearTarget();
+    if (isValidTarget && targetEl !== nodeEl) {
+      targetEl = nodeEl;
+      targetEl.classList.add("connect-drop-target");
+    }
+  };
+  const onUp = async () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    line.remove();
+    const targetId = targetEl && Number(targetEl.dataset.id);
+    clearTarget();
+    if (!targetId || targetId === sourceNode.id) return;
+    await createEdgeWithHistory(sourceNode.id, targetId);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
 }
 
 // ---------- context menu ----------
@@ -1458,23 +1611,57 @@ contextMenu.addEventListener("click", async (e) => {
       renderCanvas();
     }
   } else if (action === "duplicate") {
-    const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
-      method: "POST",
-      body: JSON.stringify({
-        title: `${node.title} (copy)`,
-        type: node.type,
-        color: node.color,
-        tags: node.tags,
-        content: node.content,
-        x: node.x + 30,
-        y: node.y + 30,
-      }),
-    });
-    state.nodes.push(created);
+    const created = await duplicateNode(node);
     pushHistory(makeCreateNodeAction(created));
     renderCanvas();
   }
   closeContextMenu();
+});
+
+// Shared by the context menu's "Duplicate" and Ctrl+D - keeps width/height
+// too (a zone/table/image duplicated this way used to lose its size and
+// fall back to the type's default).
+async function duplicateNode(node, offset = 30) {
+  const created = await api(`/api/boards/${state.currentBoardId}/nodes`, {
+    method: "POST",
+    body: JSON.stringify({
+      title: `${node.title} (copy)`,
+      type: node.type,
+      color: node.color,
+      tags: node.tags,
+      content: node.content,
+      x: node.x + offset,
+      y: node.y + offset,
+      width: node.width,
+      height: node.height,
+    }),
+  });
+  state.nodes.push(created);
+  return created;
+}
+
+// Ctrl+D duplicates whatever's currently multi-selected (Ctrl+click or a
+// rubber-band drag picks the selection first) - same one-node case as the
+// context menu's Duplicate when exactly one node is selected, but also
+// works for a whole group at once.
+document.addEventListener("keydown", async (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "d") return;
+  if (state.currentView !== "board" || !state.selectedNodeIds.size) return;
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select" || e.target.isContentEditable) return;
+  e.preventDefault();
+  const refs = [...state.selectedNodeIds].map((id) => state.nodes.find((n) => n.id === id)).filter(Boolean);
+  if (!refs.length) return;
+  const createdNodes = [];
+  for (const ref of refs) createdNodes.push(await duplicateNode(ref));
+  const actions = createdNodes.map((n) => makeCreateNodeAction(n));
+  pushHistory({
+    undo: async () => { for (const a of actions) await a.undo(); },
+    redo: async () => { for (const a of actions) await a.redo(); },
+  });
+  clearMultiSelection();
+  renderCanvas();
+  createdNodes.forEach((n) => { state.selectedNodeIds.add(n.id); applyMultiSelectClass(n.id); });
 });
 
 // ---------- node modal ----------
@@ -1625,6 +1812,7 @@ function makeCreateNodeAction(nodeRef) {
         body: JSON.stringify({
           title: nodeRef.title, type: nodeRef.type, color: nodeRef.color,
           tags: nodeRef.tags, content: nodeRef.content, x: nodeRef.x, y: nodeRef.y,
+          width: nodeRef.width, height: nodeRef.height,
         }),
       });
       nodeRef.id = recreated.id;
@@ -1642,6 +1830,7 @@ function makeDeleteNodeAction(nodeRef) {
         body: JSON.stringify({
           title: nodeRef.title, type: nodeRef.type, color: nodeRef.color,
           tags: nodeRef.tags, content: nodeRef.content, x: nodeRef.x, y: nodeRef.y,
+          width: nodeRef.width, height: nodeRef.height,
         }),
       });
       nodeRef.id = recreated.id;
@@ -1988,6 +2177,44 @@ $("#file-save-btn").onclick = async () => {
     setFileStatus(`Saved at ${now}`);
   } catch (e) {
     alert(`Error: ${e.message}`);
+  }
+};
+
+// "Save As" only copies mapes.db (via SQLite's backup API) - this zips the
+// whole data folder instead (db + captures/ + secret.key), so a copy taken
+// this way keeps working - attachments included, credential secrets still
+// decryptable - once moved somewhere else entirely, not just re-saved next
+// to the same original folder.
+$("#backup-zip-btn").onclick = async () => {
+  const btn = $("#backup-zip-btn");
+  const originalLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Backing up...";
+  try {
+    if (hasNativeApi()) {
+      const path = await window.pywebview.api.pick_backup_zip_file("mapes-backup.zip");
+      if (!path) return;
+      const result = await window.pywebview.api.backup_data_zip(path);
+      if (result !== true) alert(`Could not write the backup: ${result}`);
+      else setFileStatus(`Backed up to: ${path}`);
+      return;
+    }
+    const res = await fetch("/api/system/backup-zip");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "mapes-backup.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert(`Error: ${e.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalLabel;
   }
 };
 

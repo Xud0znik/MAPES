@@ -114,6 +114,21 @@ class Api:
         """For "Export board as image" - pick a destination .png file."""
         return self._pick_export_file(default_name, "mapes-board.png", "PNG image", "*.png")
 
+    def pick_backup_zip_file(self, default_name):
+        """For "Backup everything as .zip" - pick a destination .zip file."""
+        return self._pick_export_file(default_name, "mapes-backup.zip", "ZIP archive", "*.zip")
+
+    def backup_data_zip(self, path):
+        """Zip the whole data folder (mapes.db + captures/ + secret.key)
+        straight to the given path - unlike the other exports, this needs no
+        rendering step in the browser, so it's done directly here instead of
+        round-tripping the bytes through the JS bridge as base64."""
+        try:
+            db.backup_zip_into(Path(path))
+            return True
+        except Exception as exc:
+            return f"error: {exc}"
+
     def _pick_export_file(self, default_name, fallback_name, filter_label, filter_pattern):
         """Native app windows (pywebview) don't reliably support a plain
         HTML <a download>/<a href> click the way a real browser tab does -

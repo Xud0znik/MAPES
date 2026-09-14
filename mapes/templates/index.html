@@ -29,6 +29,7 @@
       <button id="file-save-as-btn" class="btn-secondary">Save As</button>
       <button id="file-save-btn" class="btn-primary" disabled>Save</button>
     </div>
+    <button id="backup-zip-btn" class="btn-secondary">📦 Backup everything as .zip</button>
     <div id="file-status" class="file-status"></div>
 
     <details class="collapsible">
@@ -78,6 +79,7 @@
           <span id="zoom-label">100%</span>
           <button id="zoom-in-btn" class="icon-btn" title="Zoom in">+</button>
         </div>
+        <button id="minimap-toggle-btn" class="icon-btn active" title="Show/hide minimap">🗺</button>
         <span class="toolbar-sep"></span>
         <div class="toolbar-actions">
           <button id="add-note-btn" class="btn-ghost"><img class="btn-icon" src="{{ url_for('static', filename='img/icons/note.png') }}" alt=""> Add note</button>
@@ -95,6 +97,9 @@
             <svg id="edges-layer"></svg>
           </div>
         </div>
+      </div>
+      <div id="minimap">
+        <canvas id="minimap-canvas" width="180" height="120"></canvas>
       </div>
     </div>
 

@@ -1,4 +1,5 @@
 import sqlite3
+import zipfile
 from pathlib import Path
 
 from flask import g, has_app_context
@@ -21,6 +22,20 @@ def configure(path):
     else:
         DATA_DIR = p
         DB_PATH = DATA_DIR / "mapes.db"
+
+
+def backup_zip_into(dest):
+    """Zip everything under DATA_DIR - mapes.db, captures/, secret.key, the
+    full set of files a board needs to work on another machine - into dest
+    (a path, or a writable binary file-like object such as an io.BytesIO
+    for streaming a download). Reads DATA_DIR fresh so this reflects
+    whatever configure() last pointed it at, same as every other DATA_DIR
+    use in the app."""
+    base = DATA_DIR
+    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in base.rglob("*"):
+            if path.is_file():
+                zf.write(path, path.relative_to(base))
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS boards (

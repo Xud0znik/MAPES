@@ -9,6 +9,7 @@ const state = {
   addZoneMode: false,
   addTableMode: false,
   minimizedImageIds: new Set(),
+  expandedNoteIds: new Set(),
   editingNodeId: null,
   zoom: 1,
   selectedNodeIds: new Set(),
@@ -135,6 +136,7 @@ async function loadBoard(boardId) {
   vaultFolderId = null;
   vaultFolderPath = [];
   state.selectedNodeIds.clear();
+  state.expandedNoteIds.clear();
   state.boardFilterQuery = "";
   $("#board-filter-input").value = "";
   state.nodes = await api(`/api/boards/${boardId}/nodes`);
@@ -671,6 +673,9 @@ function renderCanvas() {
   for (const id of state.selectedNodeIds) {
     if (!state.nodes.some((n) => n.id === id)) state.selectedNodeIds.delete(id);
   }
+  for (const id of state.expandedNoteIds) {
+    if (!state.nodes.some((n) => n.id === id)) state.expandedNoteIds.delete(id);
+  }
   canvas.querySelectorAll(".node").forEach((n) => n.remove());
   // Zones render first (so they sit behind, via normal DOM stacking order)
   // and everything else on top of them, so nodes placed inside a zone stay
@@ -748,12 +753,20 @@ function buildNodeEl(node) {
   }
 
   const action = QUICK_ACTIONS[node.type];
+  const noteHasContent = isNote && !!(node.content && node.content.trim());
+  const noteExpanded = isNote && state.expandedNoteIds.has(node.id);
   el.innerHTML = `
     <div class="node-icon-badge">${NODE_ICONS[node.type] || NODE_ICONS.other}</div>
     <div class="node-type">${escapeHtml(node.type)}</div>
     <div class="node-title">${escapeHtml(node.title)}</div>
     ${node.tags ? `<div class="node-tags">#${escapeHtml(node.tags).replace(/,\s*/g, " #")}</div>` : ""}
-    ${isNote ? `<div class="node-quick-text" data-placeholder="Click to write...">${escapeHtml(node.content || "")}</div>` : ""}
+    ${isNote ? (noteHasContent
+      ? `<div class="node-quick-row">
+           <button type="button" class="node-quick-toggle" title="Show/hide text">${noteExpanded ? "▾" : "▸"}</button>
+           <div class="node-quick-text${noteExpanded ? "" : " collapsed"}" data-placeholder="Click to write...">${escapeHtml(node.content)}</div>
+         </div>`
+      : `<div class="node-quick-text" data-placeholder="Click to write..."></div>`
+    ) : ""}
     ${action && node.content ? `<div class="node-quick-action ${action.className}" title="${action.title}">${action.icon} ${escapeHtml(node.content)}</div>` : ""}
     <div class="node-badges"></div>
   `;
@@ -761,11 +774,29 @@ function buildNodeEl(node) {
   makeDraggable(el, node);
   if (isNote) {
     const quickText = el.querySelector(".node-quick-text");
+    const quickToggle = el.querySelector(".node-quick-toggle");
     quickText.addEventListener("click", (e) => {
       e.stopPropagation();
       if (el._dragMoved) { el._dragMoved = false; return; }
-      startQuickNoteEdit(quickText, node);
+      // Expands just for the duration of this edit - unlike the ▸ toggle,
+      // clicking the text itself doesn't pin it open, so it collapses back
+      // down once editing ends (see the finish() check in startQuickNoteEdit).
+      if (quickText.classList.contains("collapsed")) {
+        quickText.classList.remove("collapsed");
+        if (quickToggle) quickToggle.textContent = "▾";
+      }
+      startQuickNoteEdit(quickText, node, quickToggle);
     });
+    if (quickToggle) {
+      quickToggle.addEventListener("mousedown", (e) => e.stopPropagation());
+      quickToggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const collapsed = quickText.classList.toggle("collapsed");
+        quickToggle.textContent = collapsed ? "▸" : "▾";
+        if (collapsed) state.expandedNoteIds.delete(node.id);
+        else state.expandedNoteIds.add(node.id);
+      });
+    }
   }
   if (action) {
     const actionEl = el.querySelector(".node-quick-action");
@@ -1118,7 +1149,11 @@ function buildImageNodeEl(el, node) {
 
 // Type directly into a sticky note's body, right on the card - like Windows
 // Sticky Notes - instead of going through the edit modal for a quick thought.
-function startQuickNoteEdit(quickText, node) {
+// toggleBtn is the ▸/▾ collapse control next to it (absent for a note that
+// was empty when the card was built) - a note not explicitly pinned open
+// via that toggle collapses back down once editing ends, so a long note
+// doesn't just stay sprawled open after a quick edit.
+function startQuickNoteEdit(quickText, node, toggleBtn) {
   quickText.contentEditable = "true";
   quickText.classList.add("editing");
   quickText.focus();
@@ -1134,6 +1169,10 @@ function startQuickNoteEdit(quickText, node) {
     quickText.removeEventListener("keydown", onKeydown);
     quickText.contentEditable = "false";
     quickText.classList.remove("editing");
+    if (!state.expandedNoteIds.has(node.id)) {
+      quickText.classList.add("collapsed");
+      if (toggleBtn) toggleBtn.textContent = "▸";
+    }
     const text = quickText.textContent;
     if (text === node.content) return;
     node.content = text;
